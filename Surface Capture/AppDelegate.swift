@@ -1,8 +1,6 @@
 //
 //  AppDelegate.swift
-//  Surface Capture
-//
-//  Created by Ashley Davison on 03/01/2025.
+//  Surface Capture App
 //
 
 import UIKit
@@ -15,6 +13,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        // Prevent screen from sleeping during capture
+        UIApplication.shared.isIdleTimerDisabled = true
 
         // Create the SwiftUI view that provides the window contents.
         let contentView = ContentView()
@@ -33,6 +33,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func applicationDidEnterBackground(_ application: UIApplication) {
+        // Re-enable screen idle timer when app goes to background
+        UIApplication.shared.isIdleTimerDisabled = false
+        
         // Use this method to release shared resources, save user data, invalidate timers, and store enough application state information to restore your application to its current state in case it is terminated later.
     }
 

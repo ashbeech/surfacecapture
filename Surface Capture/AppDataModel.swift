@@ -1,3 +1,8 @@
+//
+//  AppDataModel.swift
+//  Surface Capture App
+//
+
 import Combine
 import RealityKit
 import SwiftUI
@@ -57,7 +62,8 @@ class AppDataModel: ObservableObject, Identifiable {
     private(set) var photogrammetrySession: PhotogrammetrySession?
     private(set) var scanFolderManager: CaptureFolderManager!
     @Published var messageList = TimedMessageList()
-    
+    @Published var selectedEntity: ModelEntity?
+
     @Published var state: ModelState = .notSet {
         didSet {
             logger.debug("didSet AppDataModel.state to \(self.state)")
@@ -200,6 +206,7 @@ class AppDataModel: ObservableObject, Identifiable {
                var configuration = PhotogrammetrySession.Configuration()
                configuration.checkpointDirectory = scanFolderManager.snapshotsFolder
                configuration.sampleOrdering = .unordered // Handle out-of-order frames better
+        configuration.isObjectMaskingEnabled = false 
                configuration.featureSensitivity = .normal // More stable than .high
                
                // Verify input images before starting

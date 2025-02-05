@@ -1,8 +1,6 @@
 //
 //  ModelView.swift
-//  Surface Capture
-//
-//  Created by Ashley Davison on 04/01/2025.
+//  Surface Capture App
 //
 
 import SwiftUI
@@ -48,7 +46,8 @@ struct ModelView: View {
                     }
                 }
                 .fullScreenCover(isPresented: $showARView) {
-                    ARPlaneCaptureView(capturedModelURL: modelFile)
+                    ARSceneView(capturedModelURL: modelFile) 
+                        .environmentObject(AppDataModel.instance)
                         .edgesIgnoringSafeArea(.all)
                 }
             } else {

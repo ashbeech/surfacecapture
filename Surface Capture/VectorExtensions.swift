@@ -1,8 +1,6 @@
 //
 //  VectorExtensions.swift
-//  Surface Capture
-//
-//  Created by Ashley Davison on 03/01/2025.
+//  Surface Capture App
 //
 
 // Helper extension for vector operations

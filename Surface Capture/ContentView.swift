@@ -1,8 +1,6 @@
 //
 //  ContentView.swift
-//  Surface Capture
-//
-//  Created by Ashley Davison on 03/01/2025.
+//  Surface Capture App
 //
 
 import RealityKit

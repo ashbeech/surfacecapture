@@ -1,3 +1,8 @@
+//
+//  USDAssetResolver.swift
+//  Surface Capture App
+//
+
 import Foundation
 import RealityKit
 

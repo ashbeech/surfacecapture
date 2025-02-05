@@ -1,3 +1,8 @@
+//
+//  CapturePrimaryView.swift
+//  Surface Capture App
+//
+
 import SwiftUI
 import RealityKit
 import ARKit
@@ -113,13 +118,13 @@ class EnhancedTrackingMonitor: NSObject, @unchecked Sendable {
     private var monitoringTask: Task<Void, Never>?
     private let regionSize: CGFloat = 50.0
     private let motionSampleCount = 10
-
+    
     func startMonitoring(
         session: ObjectCaptureSession,
         completion: @escaping @Sendable (TrackingQualityStatus, CameraStats) -> Void
     ) {
         objectCaptureSession = session
-
+        
         // Monitor session state changes
         monitoringTask = Task { [weak self] in
             guard let self = self else { return }
@@ -139,7 +144,7 @@ class EnhancedTrackingMonitor: NSObject, @unchecked Sendable {
             }
         }
     }
-
+    
     private func processStateUpdate(_ state: ObjectCaptureSession.CaptureState) async throws {
         switch state {
         case .failed(let error):
@@ -147,7 +152,6 @@ class EnhancedTrackingMonitor: NSObject, @unchecked Sendable {
             await self.state.updateMetrics(hasResourceConstraints: true)
             
         case .completed:
-            // Handle completion if needed
             break
             
         case .ready, .detecting:
@@ -161,7 +165,7 @@ class EnhancedTrackingMonitor: NSObject, @unchecked Sendable {
             break
         }
     }
-
+    
     func stopMonitoring() {
         Task { [weak self] in
             guard let self = self else { return }
@@ -171,6 +175,103 @@ class EnhancedTrackingMonitor: NSObject, @unchecked Sendable {
             objectCaptureSession = nil
             await state.reset()
         }
+    }
+}
+
+struct CustomCaptureOverlay: View {
+    let captureState: ObjectCaptureSession.CaptureState
+    let trackingQuality: TrackingQualityStatus
+    
+    var body: some View {
+        VStack {
+            // Custom coaching hints
+            if case .detecting = captureState {
+                CoachingHint(
+                    icon: "camera.viewfinder",
+                    message: "Move closer to the surface"
+                )
+                .transition(.opacity)
+            }
+            
+            // Quality indicator
+            QualityIndicatorView(quality: trackingQuality)
+                .padding(.top)
+            
+            // Capture progress
+            if case .capturing = captureState {
+                CaptureProgressView()
+                    .transition(.slide)
+            }
+        }
+        .animation(.easeInOut, value: captureState)
+    }
+}
+
+struct CoachingHint: View {
+    let icon: String
+    let message: String
+    
+    var body: some View {
+        HStack {
+            Image(systemName: icon)
+                .font(.system(size: 24))
+            Text(message)
+                .font(.headline)
+        }
+        .foregroundColor(.white)
+        .padding()
+        .background(Color.black.opacity(0.7))
+        .cornerRadius(10)
+    }
+}
+
+struct QualityIndicatorView: View {
+    let quality: TrackingQualityStatus
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(qualityColor)
+                .frame(width: 12, height: 12)
+            
+            Text(qualityMessage)
+                .font(.subheadline)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Color.black.opacity(0.5))
+        .cornerRadius(15)
+    }
+    
+    private var qualityColor: Color {
+        switch quality {
+        case .normal: return .green
+        case .limited: return .yellow
+        case .notAvailable: return .red
+        }
+    }
+    
+    private var qualityMessage: String {
+        switch quality {
+        case .normal: return "Good Tracking"
+        case .limited: return "Move Slower"
+        case .notAvailable: return "Lost Tracking"
+        }
+    }
+}
+
+struct CaptureProgressView: View {
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "camera.circle.fill")
+                .font(.system(size: 24))
+            Text("Capturing Surface...")
+                .font(.headline)
+        }
+        .foregroundColor(.white)
+        .padding()
+        .background(Color.black.opacity(0.7))
+        .cornerRadius(10)
     }
 }
 
@@ -224,7 +325,7 @@ struct CapturePrimaryView: View {
     @State private var showTrackingWarning = false
     @State private var showPerformanceWarning = false
     
-    private let trackingMonitor = EnhancedTrackingMonitor() //TrackingQualityMonitor()
+    private let trackingMonitor = EnhancedTrackingMonitor()
     
     var body: some View {
         ZStack {
@@ -235,7 +336,11 @@ struct CapturePrimaryView: View {
                     }
                     .overlay(alignment: .top) {
                         if isCapturing {
-                            //statusOverlay
+                            CustomCaptureOverlay(
+                                captureState: session.state,
+                                trackingQuality: trackingQuality
+                            )
+                            .padding(.top, 44)
                         }
                     }
                     .overlay(alignment: .center) {
@@ -299,23 +404,6 @@ struct CapturePrimaryView: View {
         .padding(.bottom, 40)
     }
     
-    private var statusOverlay: some View {
-        VStack(spacing: 8) {
-            Text(captureStatusMessage)
-                .font(.headline)
-            
-            if trackingQuality != .normal {
-                Text(trackingQualityMessage)
-                    .foregroundColor(.yellow)
-            }
-        }
-        .foregroundColor(.white)
-        .padding()
-        .background(Color.black.opacity(0.7))
-        .cornerRadius(10)
-        .padding(.top, 40)
-    }
-    
     // MARK: - Helper Methods
     
     private func setupSession() {
@@ -329,6 +417,15 @@ struct CapturePrimaryView: View {
                 showPerformanceWarning = true
             }
         
+        // Start monitoring immediately
+        trackingMonitor.startMonitoring(session: session) { quality, stats in
+            Task { @MainActor in
+                trackingQuality = quality
+                showPerformanceWarning = stats.hasResourceConstraints
+            }
+        }
+        
+        // Initialize camera immediately
         startCameraInitialization()
     }
     
@@ -339,40 +436,29 @@ struct CapturePrimaryView: View {
     }
     
     private func startCameraInitialization() {
-            isInitializing = true
-            
-            // Add timeout for initialization
-            Task { @MainActor in
-                try? await Task.sleep(for: .seconds(5))
-                if !isCameraReady {
-                    initializationError = CameraError.initializationTimeout
-                }
-            }
-            
-            // Setup session state monitoring
-            trackingMonitor.startMonitoring(session: session) { quality, stats in
-                Task { @MainActor in
-                    trackingQuality = quality
-                    showPerformanceWarning = stats.hasResourceConstraints
-                    
-                    if quality == .limited {
-                        showTrackingWarning = true
-                    }
-                }
-            }
-            
-            // Allow time for camera initialization
-            Task { @MainActor in
-                try? await Task.sleep(for: .seconds(2))
-                isCameraReady = true
-                isInitializing = false
+        isInitializing = true
+        
+        // Add timeout just in case
+        Task { @MainActor in
+            //try? await Task.sleep(for: .seconds(0))
+            if !isCameraReady {
+                initializationError = CameraError.initializationTimeout
             }
         }
+        
+        // Make camera ready immediately - this worked in the original code
+        isCameraReady = true
+        isInitializing = false
+    }
     
     private func startCapture() {
         guard isCameraReady && !showPerformanceWarning else { return }
         
         isCapturing = true
+        
+        // TODO: Add guard in case not ready
+        
+        // Start the capture session immediately
         session.startCapturing()
         
         // Reset warning state
