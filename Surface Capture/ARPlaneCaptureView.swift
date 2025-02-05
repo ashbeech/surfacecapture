@@ -11,7 +11,6 @@ import ARKit
 import Foundation
 
 struct ARPlaneCaptureView: UIViewControllerRepresentable {
-    @EnvironmentObject private var appModel: AppDataModel
     let capturedModelURL: URL?
     
     func makeUIViewController(context: Context) -> ARPlaneCaptureViewController {
@@ -48,15 +47,15 @@ struct ARSceneView: View {
                     .foregroundColor(.white)
                     .padding()
                     .background(Color.black.opacity(0.7))
-                
+                 */
+
+                /*
                 // Only show controls when model is selected
-                if appModel.selectedModelEntity != nil {
                     HStack {
                         Spacer()
                         OpacityControlsView()
                             .environmentObject(appModel)  // Add this
                     }
-                }
                  */
                 
                 // Instructions or other UI elements

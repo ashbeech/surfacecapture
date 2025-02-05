@@ -9,7 +9,6 @@ import ARKit
 import Combine
 
 class ARPlaneCaptureViewController: UIViewController {
-    @MainActor private var appModel: AppDataModel?
     private var arView: ARView!
     private var planeAnchors: [ARAnchor: ModelEntity] = [:]
     private var capturedPlaneModel: ModelEntity?
@@ -109,8 +108,7 @@ class ARPlaneCaptureViewController: UIViewController {
     }
     
     @objc private func handlePinch(_ gesture: UIPinchGestureRecognizer) {
-        //guard let modelEntity = activeModelEntity ?? capturedPlaneModel else { return }
-        guard let modelEntity = appModel?.selectedEntity else { return }
+        guard let modelEntity = activeModelEntity ?? capturedPlaneModel else { return }
         
         if gesture.state == .began {
             lastScale = 1.0
@@ -126,8 +124,7 @@ class ARPlaneCaptureViewController: UIViewController {
     }
     
     @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
-        //guard let modelEntity = activeModelEntity ?? capturedPlaneModel else { return }
-        guard let modelEntity = appModel?.selectedEntity else { return }
+        guard let modelEntity = activeModelEntity ?? capturedPlaneModel else { return }
         
         let translation = gesture.translation(in: gesture.view)
         let delta = SIMD3<Float>(Float(translation.x / 1000.0), 0, Float(translation.y / 1000.0))
@@ -138,15 +135,14 @@ class ARPlaneCaptureViewController: UIViewController {
     
     @objc func handleTap(_ sender: UITapGestureRecognizer) {
         
-        //guard let capturedPlaneModel = self.capturedPlaneModel else { return }
-        guard let modelEntity = appModel?.selectedEntity else { return }
+        guard let capturedPlaneModel = self.capturedPlaneModel else { return }
         
         if let arView = sender.view as? ARView {
             let tapLocation = sender.location(in: arView)
             if let raycastResult = arView.raycast(from: tapLocation, allowing: .estimatedPlane, alignment: .any).first {
                 let newAnchor = AnchorEntity(world: raycastResult.worldTransform)
-                modelEntity.position = [0, 0, 0]
-                newAnchor.addChild(modelEntity)
+                capturedPlaneModel.position = [0, 0, 0]
+                newAnchor.addChild(capturedPlaneModel)
                 arView.scene.addAnchor(newAnchor)
             }
         }
@@ -155,55 +151,43 @@ class ARPlaneCaptureViewController: UIViewController {
     
     func loadCapturedModel(_ modelURL: URL) {
         Task {
-            do {
-                // Create required texture directories before loading model
-                let snapshotFolder = modelURL.deletingLastPathComponent()
-                    .appendingPathComponent("Snapshots")
-                if let snapshotID = try? FileManager.default.contentsOfDirectory(at: snapshotFolder, includingPropertiesForKeys: nil)
-                    .first(where: { $0.hasDirectoryPath })?.lastPathComponent {
-                    try? FileManager.default.createDirectory(at: snapshotFolder.appendingPathComponent(snapshotID).appendingPathComponent("0"),
-                                                          withIntermediateDirectories: true)
-                }
-                
-                // First ensure textures are in correct locations
-                if let snapshotID = try? extractSnapshotID(from: modelURL) {
-                    let snapshotFolder = modelURL.deletingLastPathComponent()
-                        .appendingPathComponent("Snapshots")
-                        .appendingPathComponent(snapshotID)
-                    
-                    let meshFiles = try FileManager.default.contentsOfDirectory(at: snapshotFolder, includingPropertiesForKeys: nil)
-                        .filter { $0.pathExtension == "usdc" }
-                    
-                    for meshFile in meshFiles {
-                        try USDAssetResolver.resolveTexturePaths(in: meshFile)
-                        try USDAssetResolver.moveTexturesToExpectedLocation(from: meshFile)
+                    do {
+                        // Create required texture directories before loading model
+                        let snapshotFolder = modelURL.deletingLastPathComponent()
+                            .appendingPathComponent("Snapshots")
+                        if let snapshotID = try? FileManager.default.contentsOfDirectory(at: snapshotFolder, includingPropertiesForKeys: nil)
+                            .first(where: { $0.hasDirectoryPath })?.lastPathComponent {
+                            try? FileManager.default.createDirectory(at: snapshotFolder.appendingPathComponent(snapshotID).appendingPathComponent("0"),
+                                                                  withIntermediateDirectories: true)
+                        }
+                        
+                        // First ensure textures are in correct locations
+                        if let snapshotID = try? extractSnapshotID(from: modelURL) {
+                            let snapshotFolder = modelURL.deletingLastPathComponent()
+                                .appendingPathComponent("Snapshots")
+                                .appendingPathComponent(snapshotID)
+                            
+                            let meshFiles = try FileManager.default.contentsOfDirectory(at: snapshotFolder, includingPropertiesForKeys: nil)
+                                .filter { $0.pathExtension == "usdc" }
+                            
+                            for meshFile in meshFiles {
+                                try USDAssetResolver.resolveTexturePaths(in: meshFile)
+                                try USDAssetResolver.moveTexturesToExpectedLocation(from: meshFile)
+                            }
+                        }
+                        
+                        // Load the model with resolved textures
+                        let modelEntity = try await ModelEntity(contentsOf: modelURL)
+                        modelEntity.scale = .one
+                        self.capturedPlaneModel = modelEntity
+                        
+                        showToast(message: "Model loaded successfully")
+                    } catch {
+                        print("Failed to load model: \(error)")
+                        showToast(message: "Failed to load model")
                     }
                 }
-                
-                // Load the model with resolved textures
-                let modelEntity = try await ModelEntity(contentsOf: modelURL)
-                modelEntity.scale = .one
-                self.capturedPlaneModel = modelEntity
-                
-                /*
-                if let appModel = (UIApplication.shared.delegate as? AppDelegate)?.window?.rootViewController?.view.window?.windowScene?.keyWindow?.rootViewController?.view.subviews.first?.next as? UIHostingController<ContentView> {
-                                            await MainActor.run {
-                                                appModel.rootView.appModel.selectedEntity = modelEntity
-                                            }
-                                        }
-                 */
-                
-                await MainActor.run {
-                    self.appModel?.selectedEntity = modelEntity
-                }
-                
-                showToast(message: "Model loaded successfully")
-            } catch {
-                print("Failed to load model: \(error)")
-                showToast(message: "Failed to load model")
             }
-        }
-    }
     
     private func extractSnapshotID(from url: URL) throws -> String? {
         let modelFolder = url.deletingLastPathComponent()

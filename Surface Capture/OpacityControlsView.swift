@@ -36,8 +36,5 @@ struct OpacityControlsView: View {
         }
         .padding(.bottom, 20)
         .padding(.trailing, 10)
-        .onAppear {
-            print("OpacityControlsView appeared")
-        }
     }
 }

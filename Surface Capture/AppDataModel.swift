@@ -62,8 +62,29 @@ class AppDataModel: ObservableObject, Identifiable {
     private(set) var photogrammetrySession: PhotogrammetrySession?
     private(set) var scanFolderManager: CaptureFolderManager!
     @Published var messageList = TimedMessageList()
-    @Published var selectedEntity: ModelEntity?
+    
+    @Published var modelOpacity: Double = 0.9 // Default opacity
+    //@Published var selectedEntity: ModelEntity?
 
+    /*
+    func adjustOpacity(by amount: Double) {
+        modelOpacity = max(0.2, min(modelOpacity + amount, 0.9))
+        if let entity = selectedModelEntity {
+            updateModelOpacity(entity: entity, opacity: modelOpacity)
+        }
+    }
+    
+    private func updateModelOpacity(entity: ModelEntity, opacity: Double) {
+        guard var material = entity.model?.materials.first as? UnlitMaterial else { return }
+        if let texture = material.color.texture {
+            material.color = .init(tint: .white.withAlphaComponent(CGFloat(opacity)), texture: texture)
+        } else {
+            material.color = .init(tint: .white.withAlphaComponent(CGFloat(opacity)))
+        }
+        entity.model?.materials = [material]
+    }
+     */
+    
     @Published var state: ModelState = .notSet {
         didSet {
             logger.debug("didSet AppDataModel.state to \(self.state)")
