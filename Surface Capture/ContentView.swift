@@ -24,8 +24,8 @@ struct ContentView: View {
     var body: some View {
         VStack {
             if let modelURL = capturedModelURL {
-                ARPlaneCaptureView(capturedModelURL: modelURL)
-                    .ignoresSafeArea()
+                //ARPlaneCaptureView(capturedModelURL: modelURL)
+                    //.ignoresSafeArea()
             } else if appModel.state == .capturing {
                 if let session = appModel.objectCaptureSession {
                     CapturePrimaryView(session: session)

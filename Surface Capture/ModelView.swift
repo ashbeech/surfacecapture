@@ -17,6 +17,8 @@ struct ModelView: View {
     @State private var errorMessage = ""
     @State private var showARView = false
     
+    @StateObject private var arController = ARPlaneCaptureViewController()
+    
     var body: some View {
         ZStack {
             if !showError {
@@ -46,9 +48,8 @@ struct ModelView: View {
                     }
                 }
                 .fullScreenCover(isPresented: $showARView) {
-                    ARSceneView(capturedModelURL: modelFile) 
-                        .environmentObject(AppDataModel.instance)
-                        .edgesIgnoringSafeArea(.all)
+                    ARSceneView(capturedModelURL: modelFile, arController: arController)
+                                               .edgesIgnoringSafeArea(.all)
                 }
             } else {
                 VStack(spacing: 20) {
