@@ -27,21 +27,42 @@ class ModelManipulator: ObservableObject {
     private var rotationY: Float = 0
     private var rotationZ: Float = 0
     
+    // Add state tracking for each button
+    @Published var isRotatingX: Bool = false
+    @Published var isRotatingY: Bool = false
+    @Published var isRotatingZ: Bool = false
+    @Published var isAdjustingDepth: Bool = false
+    var onStateChange: ((ModelManipulationState) -> Void)?
+    
     // Track original position
     private var originalPosition: SIMD3<Float>?
+    // Track original scale
+    private var originalScale: SIMD3<Float>?
+    
     
     func startManipulation(_ state: ModelManipulationState) {
-        currentState = state
+        if currentState == state {
+            currentState = .none
+        } else {
+            currentState = state
+        }
         lastDragLocation = nil
+        onStateChange?(currentState)  // Notify state change
     }
-    
+        
     func endManipulation() {
         currentState = .none
         lastDragLocation = nil
+        onStateChange?(currentState)  // Notify state change
     }
     
     func setOriginalPosition(_ position: SIMD3<Float>) {
         originalPosition = position
+    }
+    
+    // Add function to set original scale
+    func setOriginalScale(_ scale: SIMD3<Float>) {
+        originalScale = scale
     }
     
     func resetTransforms(_ entity: ModelEntity) {
@@ -49,9 +70,20 @@ class ModelManipulator: ObservableObject {
         rotationY = 0
         rotationZ = 0
         entity.transform.rotation = simd_quatf(angle: 0, axis: [0, 1, 0])
+        
         if let originalPosition = originalPosition {
             entity.position = originalPosition
         }
+        
+        // Reset scale to original value or default to 1 if not set
+        if let originalScale = originalScale {
+            entity.transform.scale = originalScale
+        } else {
+            entity.transform.scale = .one
+        }
+        
+        // Reset all states
+        endManipulation()
     }
     
     func updateRotation(delta: Float, for axis: ModelManipulationState) -> simd_quatf {

@@ -49,7 +49,8 @@ struct ModelView: View {
                 }
                 .fullScreenCover(isPresented: $showARView) {
                     ARSceneView(capturedModelURL: modelFile, arController: arController)
-                                               .edgesIgnoringSafeArea(.all)
+                        .environmentObject(AppDataModel.instance)
+                                .edgesIgnoringSafeArea(.all)
                 }
             } else {
                 VStack(spacing: 20) {

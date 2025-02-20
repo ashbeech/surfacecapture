@@ -22,13 +22,29 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
     private var lastPanLocation: CGPoint = .zero
     private var activeModelEntity: ModelEntity?
     
+    @Published var isModelPlaced: Bool = false
     @Published var isModelSelected: Bool = false
     @Published var modelManipulator: ModelManipulator
     @Published var isPulsing: Bool = false
+    @Published var currentManipulationState: ModelManipulationState = .none
+    
+    @Published var lockedPosition: Bool = false
+    @Published var lockedRotation: Bool = false
+    @Published var lockedScale: Bool = false
+    @Published var isWorkModeActive: Bool = false
+    
     
     override init(nibName nibNameOrNil: String? = nil, bundle nibBundleOrNil: Bundle? = nil) {
         self.modelManipulator = ModelManipulator()
         super.init(nibName: nibNameOrNil, bundle: nibBundleOrNil)
+        
+        // Add observer for state changes
+        modelManipulator.onStateChange = { [weak self] newState in
+            DispatchQueue.main.async {
+                self?.currentManipulationState = newState
+                self?.objectWillChange.send()  // Trigger view update
+            }
+        }
     }
     
     required init?(coder: NSCoder) {
@@ -108,7 +124,7 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
     }
     
     @objc private func handleRotation(_ gesture: UIRotationGestureRecognizer) {
-        guard let modelEntity = capturedPlaneModel,
+        guard !lockedRotation, let modelEntity = capturedPlaneModel,
               modelManipulator.currentState == .none else { return }
         
         if gesture.state == .began {
@@ -125,7 +141,7 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
     }
     
     @objc private func handlePinch(_ gesture: UIPinchGestureRecognizer) {
-        guard let modelEntity = capturedPlaneModel,
+        guard !lockedScale, let modelEntity = capturedPlaneModel,
               modelManipulator.currentState == .none else { return }
         
         if gesture.state == .began {
@@ -142,7 +158,7 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
     }
     
     @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
-        guard let modelEntity = capturedPlaneModel,
+        guard !lockedPosition, let modelEntity = capturedPlaneModel,
               modelManipulator.currentState == .none else { return }
         
         let translation = gesture.translation(in: gesture.view)
@@ -158,7 +174,7 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         
         guard let capturedPlaneModel = self.capturedPlaneModel,
               modelManipulator.currentState == .none else { return }
-        
+                        
         if let arView = sender.view as? ARView {
             let location = sender.location(in: arView)
             
@@ -170,12 +186,14 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
                     return
                 }
             }
-            
+
             // If we have a model and tapped on a plane (not the model), place it
-            if let capturedPlaneModel = self.capturedPlaneModel,
+            if let capturedPlaneModel = self.capturedPlaneModel, !lockedPosition,
                // Only place if we're not in selection mode
                let raycastResult = arView.raycast(from: location, allowing: .estimatedPlane, alignment: .any).first {
                 isModelSelected = false
+                isModelPlaced = true
+
                 let newAnchor = AnchorEntity(world: raycastResult.worldTransform)
                 capturedPlaneModel.position = [0, 0, 0]
                 newAnchor.addChild(capturedPlaneModel)
@@ -194,6 +212,26 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
          }
          */
         
+    }
+    
+    func clearARScene() {
+        // Reset all state
+        isModelSelected = false
+        isModelPlaced = false
+        isPulsing = false
+        lockedPosition = false
+        lockedRotation = false
+        lockedScale = false
+        isWorkModeActive = false
+        
+        // Clear the AR scene
+        if let capturedPlaneModel = capturedPlaneModel {
+            capturedPlaneModel.removeFromParent()
+        }
+        
+        // Reset AR session
+        let configuration = ARWorldTrackingConfiguration()
+        arView.session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
     }
     
     private var currentOpacity: Float = 1.0  // Add this to track current opacity
@@ -349,6 +387,7 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
                 
                 // Store the original position when first loading the model
                 modelManipulator.setOriginalPosition(modelEntity.position)
+                modelManipulator.setOriginalScale(modelEntity.transform.scale)
                 
                 // Initialize the opacity when loading
                 currentOpacity = 1.0

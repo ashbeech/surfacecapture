@@ -53,9 +53,15 @@ struct ContentView: View {
             if newState == .failed {
                 showErrorAlert = true
                 showReconstructionView = false
+
             } else if newState == .viewing {
                 // Only show reconstruction view when model is ready to view
                 showReconstructionView = true
+            } else if newState == .restart {
+                // Clear everything and go back to capture
+                capturedModelURL = nil
+                showReconstructionView = false
+                appModel.state = .ready
             }
         }
         .sheet(isPresented: $showReconstructionView) {
