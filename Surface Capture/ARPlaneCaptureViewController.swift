@@ -12,15 +12,19 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
     
     private var arView: ARView!
     private var planeAnchors: [ARAnchor: ModelEntity] = [:]
+    private var currentAnchor: AnchorEntity?
     private var capturedPlaneModel: ModelEntity?
     private var cancellables = Set<AnyCancellable>()
+    private var activeAnchors: Set<AnchorEntity> = []
     
     // Gesture tracking properties
     private var lastScale: CGFloat = 1.0
     private var lastRotation: Angle = .zero
     private var accumulatedRotation: Angle = .zero
     private var lastPanLocation: CGPoint = .zero
+    private var currentOpacity: Float = 1.0
     private var activeModelEntity: ModelEntity?
+    private var originalMaterials: [RealityKit.Material]?
     
     @Published var isModelPlaced: Bool = false
     @Published var isModelSelected: Bool = false
@@ -52,11 +56,152 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         super.init(coder: coder)
     }
     
+    deinit {
+        print("ARPlaneCaptureViewController is being deinitialized")
+        cleanupSceneResources()
+        cleanup()
+    }
+    
     override func viewDidLoad() {
         super.viewDidLoad()
         setupARView()
         setupGestures()
         setupModelManipulationGesture()
+    }
+    
+    // Override view lifecycle methods
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        cleanupSceneResources()
+    }
+    
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        arView?.session.pause()
+    }
+    
+    private func cleanup() {
+        // Remove outline
+        outlineEntity?.removeFromParent()
+        outlineEntity = nil
+        
+        // Cancel all subscriptions
+        cancellables.forEach { $0.cancel() }
+        cancellables.removeAll()
+        
+        // Remove all anchors and entities
+        planeAnchors.forEach { (_, entity) in
+            entity.removeFromParent()
+        }
+        planeAnchors.removeAll()
+        
+        // Remove captured model
+        capturedPlaneModel?.removeFromParent()
+        capturedPlaneModel = nil
+        
+        // Clean up AR session
+        cleanupARSession()
+    }
+    
+    private func cleanupSceneResources() {
+        // Remove all subscriptions from ARView updates
+        if let arView = arView {
+            arView.scene.subscribe(to: SceneEvents.Update.self) { _ in }.cancel()
+        }
+        
+        // Clean up model resources
+        if let model = capturedPlaneModel {
+            // Remove the model component entirely instead of trying to modify it
+            model.components[ModelComponent.self] = nil
+            
+            // Remove collision components
+            model.components[CollisionComponent.self] = nil
+            
+            // Remove model from parent
+            model.removeFromParent()
+        }
+        
+        // Clean up all active anchors
+        activeAnchors.forEach { anchor in
+            // Remove all child entities first
+            anchor.children.forEach { entity in
+                if let modelEntity = entity as? ModelEntity {
+                    // Remove model component
+                    modelEntity.components[ModelComponent.self] = nil
+                    modelEntity.components[CollisionComponent.self] = nil
+                }
+                entity.removeFromParent()
+            }
+            anchor.removeFromParent()
+        }
+        activeAnchors.removeAll()
+        
+        // Clean up current anchor
+        if let currentAnchor = currentAnchor {
+            currentAnchor.children.forEach { $0.removeFromParent() }
+            currentAnchor.removeFromParent()
+            self.currentAnchor = nil
+        }
+        
+        // Clean up plane anchors
+        planeAnchors.forEach { (arAnchor, entity) in
+            entity.components[CollisionComponent.self] = nil
+            entity.removeFromParent()
+        }
+        planeAnchors.removeAll()
+        
+        // Reset ARView scene
+        if let arView = arView {
+            // Remove all anchors from the scene
+            arView.scene.anchors.removeAll()
+            
+            // Reset environment to a neutral state
+            if let resource = try? EnvironmentResource.load(named: "white") {
+                arView.environment.lighting.resource = resource
+            }
+            
+            // Clear debug options
+            arView.debugOptions = []
+            
+            // Remove coaching overlay if present
+            arView.subviews.forEach { view in
+                if view is ARCoachingOverlayView {
+                    view.removeFromSuperview()
+                }
+            }
+        }
+    }
+    
+    private func cleanupARSession() {
+        // Stop AR session and remove all anchors
+        arView?.session.pause()
+        arView?.scene.anchors.removeAll()
+        
+        // Remove all gestures to prevent retain cycles
+        if let gestureRecognizers = arView?.gestureRecognizers {
+            for recognizer in gestureRecognizers {
+                arView?.removeGestureRecognizer(recognizer)
+            }
+        }
+    }
+    
+    func clearARScene() {
+        // Reset all state
+        isModelSelected = false
+        isModelPlaced = false
+        isPulsing = false
+        lockedPosition = false
+        lockedRotation = false
+        lockedScale = false
+        isWorkModeActive = false
+        
+        // Clean up AR resources
+        cleanup()
+        
+        // Reset AR session with new configuration
+        let configuration = ARWorldTrackingConfiguration()
+        configuration.planeDetection = [.horizontal, .vertical]
+        arView?.session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
     }
     
     private func setupARView() {
@@ -101,6 +246,14 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         coachingOverlay.goal = .horizontalPlane
         coachingOverlay.frame = arView.bounds
         arView.addSubview(coachingOverlay)
+        
+        // Track newly added anchors
+        arView.scene.subscribe(to: SceneEvents.Update.self) { [weak self] _ in
+            guard let self = self else { return }
+            // Update active anchors set from current scene anchors
+            let currentAnchors = Set(self.arView.scene.anchors.compactMap { $0 as? AnchorEntity })
+            self.activeAnchors = currentAnchors
+        }.store(in: &cancellables)
         
         // Add debug visualization for planes
         arView.debugOptions = [.showSceneUnderstanding]
@@ -167,9 +320,226 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         lastPanLocation = gesture.location(in: gesture.view)
         gesture.setTranslation(.zero, in: gesture.view)
     }
+        
+    private var outlineEntity: ModelEntity?
+    private var modelTransformObserver: Cancellable?
+    private var originalModelScale: SIMD3<Float>?
+
+    internal func updateModelHighlight(isSelected: Bool) {
+        guard let capturedPlaneModel = capturedPlaneModel else { return }
+
+        if isSelected {
+            if outlineEntity == nil {
+                // Store original model scale when first creating the outline
+                originalModelScale = capturedPlaneModel.scale
+                
+                // Get the visual bounds in model's space
+                let bounds = capturedPlaneModel.visualBounds(relativeTo: capturedPlaneModel.parent)
+                
+                // Create an empty parent entity to handle positioning correctly
+                let containerEntity = ModelEntity()
+                outlineEntity = containerEntity
+                
+                // Add the container to the same parent as the model
+                if let parentEntity = capturedPlaneModel.parent {
+                    parentEntity.addChild(containerEntity)
+                    containerEntity.position = capturedPlaneModel.position
+                    containerEntity.orientation = capturedPlaneModel.orientation
+                } else {
+                    capturedPlaneModel.addChild(containerEntity)
+                    containerEntity.position = .zero
+                }
+                
+                // Create the actual wireframe box
+                let boxSize = bounds.extents * 1.02  // 2% larger than model
+                let boxEntity = createWireframeBox(size: boxSize, color: .white)
+                
+                // Position the box at the center of the bounds relative to the container
+                containerEntity.addChild(boxEntity)
+                
+                // Determine center offset (if any)
+                let centerOffset = bounds.center - capturedPlaneModel.position
+                boxEntity.position = centerOffset
+                
+                // Set up subscription to model's transform changes
+                modelTransformObserver = capturedPlaneModel.scene?.subscribe(to: SceneEvents.Update.self, { [weak self] _ in
+                    self?.updateOutlineTransform()
+                })
+                
+                // Initial transform update
+                updateOutlineTransform()
+            }
+        } else {
+            // Remove wireframe when deselected
+            outlineEntity?.removeFromParent()
+            outlineEntity = nil
+            originalModelScale = nil
+            
+            // Remove transform observer
+            modelTransformObserver?.cancel()
+            modelTransformObserver = nil
+        }
+    }
+
+    struct LineSegmentComponent: Component {
+        static let query = EntityQuery(where: .has(LineSegmentComponent.self))
+    }
+
+    private func updateOutlineTransform() {
+        guard let capturedPlaneModel = capturedPlaneModel,
+              let containerEntity = outlineEntity,
+              let originalScale = originalModelScale else { return }
+        
+        // Update container position and orientation to match model's current transform
+        containerEntity.position = capturedPlaneModel.position
+        containerEntity.orientation = capturedPlaneModel.orientation
+        
+        // Calculate relative scale - how much has the model scaled since we created the outline
+        let relativeScale = SIMD3<Float>(
+            capturedPlaneModel.scale.x / originalScale.x,
+            capturedPlaneModel.scale.y / originalScale.y,
+            capturedPlaneModel.scale.z / originalScale.z
+        )
+        
+        // Apply relative scale to maintain proper proportions of the outline box
+        containerEntity.scale = relativeScale
+        
+        // Compensate line thickness to maintain consistent visual appearance
+        compensateLineThickness(containerEntity, relativeScale: relativeScale)
+    }
+
+    private func compensateLineThickness(_ entity: Entity, relativeScale: SIMD3<Float>) {
+        // Calculate the average scale factor to determine how much to compensate
+        let avgScale = (relativeScale.x + relativeScale.y + relativeScale.z) / 3.0
+        
+        for child in entity.children {
+            if let modelEntity = child as? ModelEntity,
+               modelEntity.components[LineSegmentComponent.self] != nil {
+                // This is one of our line segments
+                // Apply inverse scale to the x and z axes (radius dimensions) to keep thickness consistent
+                let inverseScale = 1.0 / avgScale
+                modelEntity.scale = SIMD3<Float>(inverseScale, 1.0, inverseScale)
+            } else {
+                // Recursively process children
+                compensateLineThickness(child, relativeScale: relativeScale)
+            }
+        }
+    }
+
+    // Create a custom wireframe box using line segments with gaps in the middle
+    private func createWireframeBox(size: SIMD3<Float>, color: UIColor) -> ModelEntity {
+        let halfWidth = size.x / 2
+        let halfHeight = size.y / 2
+        let halfLength = size.z / 2
+        
+        // Define the 8 corners of the box
+        let corners: [SIMD3<Float>] = [
+            // Bottom face
+            [-halfWidth, -halfHeight, -halfLength],
+            [halfWidth, -halfHeight, -halfLength],
+            [halfWidth, -halfHeight, halfLength],
+            [-halfWidth, -halfHeight, halfLength],
+            // Top face
+            [-halfWidth, halfHeight, -halfLength],
+            [halfWidth, halfHeight, -halfLength],
+            [halfWidth, halfHeight, halfLength],
+            [-halfWidth, halfHeight, halfLength]
+        ]
+        
+        // Define the 12 edges of the box (pairs of corner indices)
+        let edges: [(Int, Int)] = [
+            // Bottom face
+            (0, 1), (1, 2), (2, 3), (3, 0),
+            // Top face
+            (4, 5), (5, 6), (6, 7), (7, 4),
+            // Connecting edges
+            (0, 4), (1, 5), (2, 6), (3, 7)
+        ]
+        
+        // Create a parent entity for all the lines
+        let boxEntity = ModelEntity()
+        
+        // Create corner line segments (10% from each end of the edges)
+        for (start, end) in edges {
+            let startPoint = corners[start]
+            let endPoint = corners[end]
+            
+            // Calculate the full edge vector
+            let edgeVector = endPoint - startPoint
+            let fullLength = length(edgeVector)
+            let direction = normalize(edgeVector)
+            
+            // Calculate visible segment length (10% of full length)
+            let visibleLength = fullLength * 0.1
+            
+            // 25% thicker than the original 0.001 radius
+            let lineRadius: Float = 0.00125
+            
+            // Create the first corner segment (start to 10%)
+            let firstSegmentEnd = startPoint + direction * visibleLength
+            createLineSegment(from: startPoint, to: firstSegmentEnd, radius: lineRadius, color: color, parent: boxEntity)
+            
+            // Create the second corner segment (90% to end)
+            let secondSegmentStart = endPoint - direction * visibleLength
+            createLineSegment(from: secondSegmentStart, to: endPoint, radius: lineRadius, color: color, parent: boxEntity)
+        }
+        
+        return boxEntity
+    }
+
+    // Helper function to create a single line segment
+    private func createLineSegment(from startPoint: SIMD3<Float>, to endPoint: SIMD3<Float>, radius: Float, color: UIColor, parent: ModelEntity) {
+        // Calculate line length
+        let segmentLength = distance(startPoint, endPoint)
+        
+        // Create a thin cylinder for the line segment
+        let lineMesh = MeshResource.generateCylinder(height: segmentLength, radius: radius)
+        
+        // Create material for the line
+        var lineMaterial = UnlitMaterial()
+        lineMaterial.color = .init(tint: color)
+        
+        // Create the line entity
+        let lineEntity = ModelEntity(mesh: lineMesh, materials: [lineMaterial])
+        
+        // Add our custom component to identify this as a line segment
+        lineEntity.components[LineSegmentComponent.self] = LineSegmentComponent()
+        
+        // Position and orient the line correctly
+        positionLine(lineEntity, from: startPoint, to: endPoint)
+        
+        // Add the line to the parent entity
+        parent.addChild(lineEntity)
+    }
     
-    private var currentAnchor: AnchorEntity?
-    
+    // Position and orient a line entity between two points
+    private func positionLine(_ lineEntity: ModelEntity, from startPoint: SIMD3<Float>, to endPoint: SIMD3<Float>) {
+        // Calculate center position and direction
+        let centerPosition = (startPoint + endPoint) / 2
+        let direction = normalize(endPoint - startPoint)
+        
+        // Set position to the center
+        lineEntity.position = centerPosition
+        
+        // Align cylinder with the direction vector
+        // Default cylinder is aligned with y-axis, so we need to rotate
+        if direction != SIMD3<Float>(0, 1, 0) && direction != SIMD3<Float>(0, -1, 0) {
+            // For any other direction, we need to find the rotation axis
+            // that rotates (0,1,0) to our direction
+            let yAxis = SIMD3<Float>(0, 1, 0)
+            let rotationAxis = normalize(cross(yAxis, direction))
+            let rotationAngle = acos(dot(yAxis, direction))
+            
+            // Set the orientation using the rotation axis and angle
+            if !rotationAxis.x.isNaN && !rotationAxis.y.isNaN && !rotationAxis.z.isNaN && !rotationAngle.isNaN {
+                lineEntity.orientation = simd_quatf(angle: rotationAngle, axis: rotationAxis)
+            }
+        } else if direction.y < 0 {
+            // Special case: direction is (0,-1,0)
+            lineEntity.orientation = simd_quatf(angle: .pi, axis: SIMD3<Float>(1, 0, 0))
+        }
+    }
+
     @objc func handleTap(_ sender: UITapGestureRecognizer) {
         
         guard let capturedPlaneModel = self.capturedPlaneModel,
@@ -183,6 +553,7 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
                 if result == capturedPlaneModel {
                     print("TAPPED ON MODEL")
                     isModelSelected = true
+                    updateModelHighlight(isSelected: true)
                     return
                 }
             }
@@ -192,12 +563,21 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
                // Only place if we're not in selection mode
                let raycastResult = arView.raycast(from: location, allowing: .estimatedPlane, alignment: .any).first {
                 isModelSelected = false
+                updateModelHighlight(isSelected: false)
                 isModelPlaced = true
 
+                // Remove previous anchor if it exists
+                if let oldAnchor = currentAnchor {
+                    oldAnchor.removeFromParent()
+                    activeAnchors.remove(oldAnchor)
+                }
+                
                 let newAnchor = AnchorEntity(world: raycastResult.worldTransform)
                 capturedPlaneModel.position = [0, 0, 0]
                 newAnchor.addChild(capturedPlaneModel)
                 arView.scene.addAnchor(newAnchor)
+                currentAnchor = newAnchor
+                activeAnchors.insert(newAnchor)
             }
         }
         /*
@@ -213,29 +593,7 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
          */
         
     }
-    
-    func clearARScene() {
-        // Reset all state
-        isModelSelected = false
-        isModelPlaced = false
-        isPulsing = false
-        lockedPosition = false
-        lockedRotation = false
-        lockedScale = false
-        isWorkModeActive = false
         
-        // Clear the AR scene
-        if let capturedPlaneModel = capturedPlaneModel {
-            capturedPlaneModel.removeFromParent()
-        }
-        
-        // Reset AR session
-        let configuration = ARWorldTrackingConfiguration()
-        arView.session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
-    }
-    
-    private var currentOpacity: Float = 1.0  // Add this to track current opacity
-    
     @objc internal func increaseOpacity() {
         print("====== INCREASE OPACITY ======")
         currentOpacity = min(currentOpacity + 0.15, 1.0)
@@ -361,7 +719,12 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         modelManipulator.resetTransforms(modelEntity)
         isPulsing = false
         OpacityManager.stopPulsing(modelEntity)
+        // Reset selection state and outline
+        isModelSelected = false
+        outlineEntity?.removeFromParent()
+        outlineEntity = nil
     }
+
     
     func loadCapturedModel(_ modelURL: URL) {
         print("Starting to load model from URL: \(modelURL)")
@@ -394,6 +757,9 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
                 
                 // Set initial transparency mode for all materials
                 if let model = modelEntity.model {
+                    
+                    originalMaterials = model.materials
+                    
                     let initialMaterials: [RealityKit.Material] = model.materials.map { material in
                         if var pbr = material as? PhysicallyBasedMaterial {
                             pbr.blending = .transparent(opacity: .init(floatLiteral: 1.0))
@@ -457,6 +823,7 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
             })
         })
     }
+    
 }
 
 extension ARPlaneCaptureViewController: UIGestureRecognizerDelegate {

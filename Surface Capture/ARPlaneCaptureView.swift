@@ -141,6 +141,7 @@ struct ARSceneView: View {
                             // Close button
                             Button(action: {
                                 arController.isModelSelected = false
+                                arController.updateModelHighlight(isSelected: false)
                                 arController.modelManipulator.endManipulation()
                             }) {
                                 Image(systemName: "xmark.circle.fill")
