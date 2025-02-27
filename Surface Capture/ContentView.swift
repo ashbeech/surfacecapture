@@ -10,8 +10,8 @@ import os
 @available(iOS 17.0, *)
 struct ContentView: View {
     static let logger = Logger(subsystem: "com.example.SurfaceCapture",
-                             category: "ContentView")
-
+                               category: "ContentView")
+    
     @StateObject var appModel: AppDataModel = AppDataModel.instance
     @State private var capturedModelURL: URL?
     @State private var showReconstructionView: Bool = false
@@ -22,10 +22,19 @@ struct ContentView: View {
     }
     
     var body: some View {
-        VStack {
-            if let modelURL = capturedModelURL {
-                //ARPlaneCaptureView(capturedModelURL: modelURL)
-                    //.ignoresSafeArea()
+        ZStack {
+            // If in image plane mode and we have a selected image, show the AR view
+            if appModel.captureType == .imagePlane && appModel.isImagePlacementMode {
+                // Show the image plane AR view
+                ARSceneView(capturedModelURL: nil, arController: ARPlaneCaptureViewController(mode: .imagePlane, entity: appModel.selectedModelEntity))
+                    .environmentObject(appModel)
+                    .edgesIgnoringSafeArea(.all)
+            } else if let modelURL = capturedModelURL {
+                ModelView(modelFile: modelURL) {
+                    capturedModelURL = nil
+                    appModel.state = .ready
+                }
+                .edgesIgnoringSafeArea(.all)
             } else if appModel.state == .capturing {
                 if let session = appModel.objectCaptureSession {
                     CapturePrimaryView(session: session)
@@ -50,15 +59,22 @@ struct ContentView: View {
             }
         }
         .onChange(of: appModel.state) { _, newState in
+            ContentView.logger.debug("State changed to: \(newState)")
+            
             if newState == .failed {
                 showErrorAlert = true
                 showReconstructionView = false
-
+                
             } else if newState == .viewing {
-                // Only show reconstruction view when model is ready to view
-                showReconstructionView = true
+                if appModel.captureType == .objectCapture {
+                    // Only show reconstruction view for object capture
+                    showReconstructionView = true
+                }
+                // For image mode, no need to do anything special - the ZStack condition will handle it
             } else if newState == .restart {
                 // Clear everything and go back to capture
+                print("***** CLEAR EVERYTHING *****")
+                
                 capturedModelURL = nil
                 showReconstructionView = false
                 appModel.state = .ready
@@ -87,9 +103,44 @@ struct ContentView: View {
     }
 }
 
+/*
+ // Create the ARImagePlaneView for displaying the image in AR
+ @available(iOS 17.0, *)
+ struct ARImagePlaneView: UIViewControllerRepresentable {
+ @EnvironmentObject var appModel: AppDataModel
+ 
+ func makeUIViewController(context: Context) -> ARPlaneCaptureViewController {
+ ContentView.logger.debug("Creating ARPlaneCaptureViewController for image plane mode")
+ 
+ // Create controller with the proper mode and entity
+ let controller = ARPlaneCaptureViewController(
+ mode: .imagePlane,
+ entity: appModel.selectedModelEntity
+ )
+ 
+ appModel.arViewController = controller
+ 
+ return controller
+ }
+ 
+ func updateUIViewController(_ uiViewController: ARPlaneCaptureViewController, context: Context) {
+ // Update if the image changes
+ if let selectedImage = appModel.selectedImage,
+ let entity = appModel.selectedModelEntity {
+ 
+ ImagePlaneEntity.updateTexture(entity, with: selectedImage)
+ }
+ }
+ 
+ static func dismantleUIViewController(_ uiViewController: ARPlaneCaptureViewController, coordinator: ()) {
+ uiViewController.pauseARSession()
+ }
+ }
+ */
+
 private struct CircularProgressView: View {
     @Environment(\.colorScheme) private var colorScheme
-
+    
     var body: some View {
         VStack {
             Spacer()

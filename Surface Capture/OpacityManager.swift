@@ -11,11 +11,12 @@ struct OpacityComponent: Component {
     var baseOpacity: Float = 0.9
     var currentOpacity: Float = 0.9
     var isPulsing: Bool = false
+    var texture: MaterialParameters.Texture? = nil
 }
 
 class OpacityManager {
-    private static let minOpacity: Float = 0.08
-    private static let maxOpacity: Float = 0.8
+    private static let minOpacity: Float = 0.09
+    private static let maxOpacity: Float = 0.9
     private static let pulseDuration: TimeInterval = 3.33
     private static var pulseTimer: Timer?
     private static var increasing = true
@@ -85,6 +86,9 @@ class OpacityManager {
             if var pbr = material as? PhysicallyBasedMaterial {
                 pbr.blending = .transparent(opacity: .init(floatLiteral: value))
                 return pbr
+            } else if var unlit = material as? UnlitMaterial {
+                unlit.blending = .transparent(opacity: .init(floatLiteral: Float(Double(value))))
+                return unlit
             }
             return material
         }

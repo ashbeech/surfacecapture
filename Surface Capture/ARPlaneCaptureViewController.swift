@@ -37,7 +37,25 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
     @Published var lockedScale: Bool = false
     @Published var isWorkModeActive: Bool = false
     
+    var mode: CaptureType = .objectCapture
     
+    init(mode: CaptureType, entity: ModelEntity? = nil) {
+        self.mode = mode
+        self.modelManipulator = ModelManipulator()
+        self.capturedPlaneModel = entity
+        
+        super.init(nibName: nil, bundle: nil)
+        
+        // Add observer for state changes
+        modelManipulator.onStateChange = { [weak self] newState in
+            DispatchQueue.main.async {
+                self?.currentManipulationState = newState
+                self?.objectWillChange.send()
+            }
+        }
+    }
+    
+    // Default initializer falls back to object capture mode
     override init(nibName nibNameOrNil: String? = nil, bundle nibBundleOrNil: Bundle? = nil) {
         self.modelManipulator = ModelManipulator()
         super.init(nibName: nibNameOrNil, bundle: nibBundleOrNil)
@@ -46,7 +64,7 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         modelManipulator.onStateChange = { [weak self] newState in
             DispatchQueue.main.async {
                 self?.currentManipulationState = newState
-                self?.objectWillChange.send()  // Trigger view update
+                self?.objectWillChange.send()
             }
         }
     }
@@ -58,8 +76,8 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
     
     deinit {
         print("ARPlaneCaptureViewController is being deinitialized")
-        cleanupSceneResources()
-        cleanup()
+        //cleanupSceneResources()
+        //cleanup()
     }
     
     override func viewDidLoad() {
@@ -72,46 +90,134 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
     // Override view lifecycle methods
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        cleanupSceneResources()
+        //cleanupSceneResources()
     }
     
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         arView?.session.pause()
     }
-    
-    private func cleanup() {
-        // Remove outline
-        outlineEntity?.removeFromParent()
-        outlineEntity = nil
+    /*
+     private func cleanup() {
+     
+     }
+     */
+    /*
+     func clearARScene() {
+     // Reset all state
+     isModelSelected = false
+     isModelPlaced = false
+     isPulsing = false
+     lockedPosition = false
+     lockedRotation = false
+     lockedScale = false
+     isWorkModeActive = false
+     
+     // Remove all subscriptions from ARView updates
+     if let arView = arView {
+     arView.scene.subscribe(to: SceneEvents.Update.self) { _ in }.cancel()
+     }
+     
+     // Clean up model resources
+     if let model = capturedPlaneModel {
+     // Remove the model component entirely instead of trying to modify it
+     model.components[ModelComponent.self] = nil
+     
+     // Remove collision components
+     model.components[CollisionComponent.self] = nil
+     
+     // Remove model from parent
+     model.removeFromParent()
+     }
+     
+     // Clean up all active anchors
+     activeAnchors.forEach { anchor in
+     // Remove all child entities first
+     anchor.children.forEach { entity in
+     if let modelEntity = entity as? ModelEntity {
+     // Remove model component
+     modelEntity.components[ModelComponent.self] = nil
+     modelEntity.components[CollisionComponent.self] = nil
+     }
+     entity.removeFromParent()
+     }
+     anchor.removeFromParent()
+     }
+     activeAnchors.removeAll()
+     
+     // Clean up current anchor
+     if let currentAnchor = currentAnchor {
+     currentAnchor.children.forEach { $0.removeFromParent() }
+     currentAnchor.removeFromParent()
+     self.currentAnchor = nil
+     }
+     
+     // Clean up plane anchors
+     planeAnchors.forEach { (arAnchor, entity) in
+     entity.components[CollisionComponent.self] = nil
+     entity.removeFromParent()
+     }
+     planeAnchors.removeAll()
+     
+     // Reset ARView scene
+     if let arView = arView {
+     // Remove all anchors from the scene
+     arView.scene.anchors.removeAll()
+     
+     // Reset environment to a neutral state
+     if let resource = try? EnvironmentResource.load(named: "white") {
+     arView.environment.lighting.resource = resource
+     }
+     
+     // Clear debug options
+     arView.debugOptions = []
+     
+     // Remove coaching overlay if present
+     arView.subviews.forEach { view in
+     if view is ARCoachingOverlayView {
+     view.removeFromSuperview()
+     }
+     }
+     }
+     
+     // Clean up AR resources
+     cleanup()
+     }
+     */
+    func clearARScene() {
+        // Reset all state
+        isModelSelected = false
+        isModelPlaced = false
+        isPulsing = false
+        lockedPosition = false
+        lockedRotation = false
+        lockedScale = false
+        isWorkModeActive = false
         
-        // Cancel all subscriptions
-        cancellables.forEach { $0.cancel() }
-        cancellables.removeAll()
+        // Stop AR session and remove all anchors
+        arView?.session.pause()
         
-        // Remove all anchors and entities
-        planeAnchors.forEach { (_, entity) in
-            entity.removeFromParent()
-        }
-        planeAnchors.removeAll()
-        
-        // Remove captured model
-        capturedPlaneModel?.removeFromParent()
-        capturedPlaneModel = nil
-        
-        // Clean up AR session
-        cleanupARSession()
-    }
-    
-    private func cleanupSceneResources() {
         // Remove all subscriptions from ARView updates
         if let arView = arView {
             arView.scene.subscribe(to: SceneEvents.Update.self) { _ in }.cancel()
         }
         
-        // Clean up model resources
+        // Remove all gestures to prevent retain cycles
+        if let gestureRecognizers = arView?.gestureRecognizers {
+            for recognizer in gestureRecognizers {
+                arView?.removeGestureRecognizer(recognizer)
+            }
+        }
+        
+        // Clean up model resources - different handling for image plane vs 3D model
         if let model = capturedPlaneModel {
-            // Remove the model component entirely instead of trying to modify it
+            // Stop any active pulsing
+            if isPulsing {
+                OpacityManager.stopPulsing(model)
+                isPulsing = false
+            }
+            
+            // Remove the model component entirely
             model.components[ModelComponent.self] = nil
             
             // Remove collision components
@@ -119,17 +225,17 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
             
             // Remove model from parent
             model.removeFromParent()
+            
+            // Important: Release the captured model reference completely
+            capturedPlaneModel = nil
         }
+        
+        // Remove all anchors from the scene
+        arView?.scene.anchors.removeAll()
         
         // Clean up all active anchors
         activeAnchors.forEach { anchor in
-            // Remove all child entities first
             anchor.children.forEach { entity in
-                if let modelEntity = entity as? ModelEntity {
-                    // Remove model component
-                    modelEntity.components[ModelComponent.self] = nil
-                    modelEntity.components[CollisionComponent.self] = nil
-                }
                 entity.removeFromParent()
             }
             anchor.removeFromParent()
@@ -143,68 +249,24 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
             self.currentAnchor = nil
         }
         
-        // Clean up plane anchors
-        planeAnchors.forEach { (arAnchor, entity) in
-            entity.components[CollisionComponent.self] = nil
-            entity.removeFromParent()
+        // Clean up outline entity if it exists
+        if outlineEntity != nil {
+            outlineEntity?.removeFromParent()
+            outlineEntity = nil
         }
-        planeAnchors.removeAll()
         
-        // Reset ARView scene
-        if let arView = arView {
-            // Remove all anchors from the scene
-            arView.scene.anchors.removeAll()
-            
-            // Reset environment to a neutral state
-            if let resource = try? EnvironmentResource.load(named: "white") {
-                arView.environment.lighting.resource = resource
-            }
-            
-            // Clear debug options
-            arView.debugOptions = []
-            
-            // Remove coaching overlay if present
-            arView.subviews.forEach { view in
-                if view is ARCoachingOverlayView {
-                    view.removeFromSuperview()
-                }
-            }
-        }
-    }
-    
-    private func cleanupARSession() {
-        // Stop AR session and remove all anchors
-        arView?.session.pause()
-        arView?.scene.anchors.removeAll()
+        // Cancel all subscriptions
+        cancellables.forEach { $0.cancel() }
+        cancellables.removeAll()
         
-        // Remove all gestures to prevent retain cycles
-        if let gestureRecognizers = arView?.gestureRecognizers {
-            for recognizer in gestureRecognizers {
-                arView?.removeGestureRecognizer(recognizer)
-            }
-        }
-    }
-    
-    func clearARScene() {
-        // Reset all state
-        isModelSelected = false
-        isModelPlaced = false
-        isPulsing = false
-        lockedPosition = false
-        lockedRotation = false
-        lockedScale = false
-        isWorkModeActive = false
-        
-        // Clean up AR resources
-        cleanup()
-        
-        // Reset AR session with new configuration
-        let configuration = ARWorldTrackingConfiguration()
-        configuration.planeDetection = [.horizontal, .vertical]
-        arView?.session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
+        // Reset model manipulator state
+        modelManipulator.endManipulation()
     }
     
     private func setupARView() {
+        
+        print("****** AR VIEW TIME ******")
+        
         arView = ARView(frame: view.bounds)
         view.addSubview(arView)
         // Disable all lighting and visual effects
@@ -320,14 +382,14 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         lastPanLocation = gesture.location(in: gesture.view)
         gesture.setTranslation(.zero, in: gesture.view)
     }
-        
+    
     private var outlineEntity: ModelEntity?
     private var modelTransformObserver: Cancellable?
     private var originalModelScale: SIMD3<Float>?
-
+    
     internal func updateModelHighlight(isSelected: Bool) {
         guard let capturedPlaneModel = capturedPlaneModel else { return }
-
+        
         if isSelected {
             if outlineEntity == nil {
                 // Store original model scale when first creating the outline
@@ -380,11 +442,11 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
             modelTransformObserver = nil
         }
     }
-
+    
     struct LineSegmentComponent: Component {
         static let query = EntityQuery(where: .has(LineSegmentComponent.self))
     }
-
+    
     private func updateOutlineTransform() {
         guard let capturedPlaneModel = capturedPlaneModel,
               let containerEntity = outlineEntity,
@@ -407,7 +469,7 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         // Compensate line thickness to maintain consistent visual appearance
         compensateLineThickness(containerEntity, relativeScale: relativeScale)
     }
-
+    
     private func compensateLineThickness(_ entity: Entity, relativeScale: SIMD3<Float>) {
         // Calculate the average scale factor to determine how much to compensate
         let avgScale = (relativeScale.x + relativeScale.y + relativeScale.z) / 3.0
@@ -425,7 +487,7 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
             }
         }
     }
-
+    
     // Create a custom wireframe box using line segments with gaps in the middle
     private func createWireframeBox(size: SIMD3<Float>, color: UIColor) -> ModelEntity {
         let halfWidth = size.x / 2
@@ -486,7 +548,7 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         
         return boxEntity
     }
-
+    
     // Helper function to create a single line segment
     private func createLineSegment(from startPoint: SIMD3<Float>, to endPoint: SIMD3<Float>, radius: Float, color: UIColor, parent: ModelEntity) {
         // Calculate line length
@@ -539,12 +601,12 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
             lineEntity.orientation = simd_quatf(angle: .pi, axis: SIMD3<Float>(1, 0, 0))
         }
     }
-
+    
     @objc func handleTap(_ sender: UITapGestureRecognizer) {
         
         guard let capturedPlaneModel = self.capturedPlaneModel,
               modelManipulator.currentState == .none else { return }
-                        
+        
         if let arView = sender.view as? ARView {
             let location = sender.location(in: arView)
             
@@ -557,7 +619,7 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
                     return
                 }
             }
-
+            
             // If we have a model and tapped on a plane (not the model), place it
             if let capturedPlaneModel = self.capturedPlaneModel, !lockedPosition,
                // Only place if we're not in selection mode
@@ -565,7 +627,7 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
                 isModelSelected = false
                 updateModelHighlight(isSelected: false)
                 isModelPlaced = true
-
+                
                 // Remove previous anchor if it exists
                 if let oldAnchor = currentAnchor {
                     oldAnchor.removeFromParent()
@@ -593,7 +655,7 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
          */
         
     }
-        
+    
     @objc internal func increaseOpacity() {
         print("====== INCREASE OPACITY ======")
         currentOpacity = min(currentOpacity + 0.15, 1.0)
@@ -622,6 +684,9 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
                 // Set the blending mode with new opacity
                 pbr.blending = .transparent(opacity: .init(floatLiteral: value))
                 return pbr
+            } else if var unlit = material as? UnlitMaterial {
+                unlit.blending = .transparent(opacity: .init(floatLiteral: Float(Double(value))))
+                return unlit
             }
             return material
         }
@@ -631,23 +696,23 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         
         print("Opacity updated")
     }
-
+    
     func togglePulsing() {
         print("TOGGLE PULSING")
-
-    isPulsing.toggle()
-    if let capturedPlaneModel = capturedPlaneModel {
-        if isPulsing {
-            print("START PULSING")
-
-            OpacityManager.startPulsing(capturedPlaneModel)
-        } else {
-            print("STOP PULSING")
-
-            OpacityManager.stopPulsing(capturedPlaneModel)
+        
+        isPulsing.toggle()
+        if let capturedPlaneModel = capturedPlaneModel {
+            if isPulsing {
+                print("START PULSING")
+                
+                OpacityManager.startPulsing(capturedPlaneModel)
+            } else {
+                print("STOP PULSING")
+                
+                OpacityManager.stopPulsing(capturedPlaneModel)
+            }
         }
     }
-}
     
     @objc func handleModelManipulation(_ gesture: UIPanGestureRecognizer) {
         guard let modelEntity = capturedPlaneModel, isModelSelected else { return }
@@ -724,7 +789,7 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         outlineEntity?.removeFromParent()
         outlineEntity = nil
     }
-
+    
     
     func loadCapturedModel(_ modelURL: URL) {
         print("Starting to load model from URL: \(modelURL)")
@@ -779,6 +844,10 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
                 showToast(message: "Failed to load model")
             }
         }
+    }
+    
+    func pauseARSession() {
+        arView?.session.pause()
     }
     
     private func extractSnapshotID(from url: URL) throws -> String? {

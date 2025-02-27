@@ -12,45 +12,39 @@ struct ModelView: View {
     static let logger = Logger(subsystem: "com.example.SurfaceCapture", category: "ModelView")
     
     let modelFile: URL
-    let endCaptureCallback: () -> Void
+    var onDismiss: (() -> Void)? = nil
+    
+    @Environment(\.presentationMode) private var presentationMode
     @State private var showError = false
     @State private var errorMessage = ""
     @State private var showARView = false
-    
-    @StateObject private var arController = ARPlaneCaptureViewController()
-    
+    @StateObject private var arController = ARPlaneCaptureViewController(mode: .objectCapture)
+
     var body: some View {
         ZStack {
             if !showError {
-                ZStack {
-                    // Model Preview
-                    ModelPreviewController(modelFile: modelFile) {
-                        // Don't call endCaptureCallback here anymore as we want to keep the view open
-                    }
-                    
-                    // Add CTA Button at the bottom
-                    VStack {
-                        Spacer()
-                        Button(action: {
-                            showARView = true
-                        }) {
-                            HStack {
-                                Image(systemName: "cube.transparent")
-                                Text("Add to AR Scene")
-                            }
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .padding()
-                            .background(Color.blue)
-                            .cornerRadius(10)
-                        }
-                        .padding(.bottom, 40)
-                    }
+                // Model Preview
+                ModelPreviewController(modelFile: modelFile) {
+                    // No-op dismiss callback - using presentation mode instead
                 }
-                .fullScreenCover(isPresented: $showARView) {
-                    ARSceneView(capturedModelURL: modelFile, arController: arController)
-                        .environmentObject(AppDataModel.instance)
-                                .edgesIgnoringSafeArea(.all)
+                
+                // Add CTA Button at the bottom
+                VStack {
+                    Spacer()
+                    Button(action: {
+                        showARView = true
+                    }) {
+                        HStack {
+                            Image(systemName: "cube.transparent")
+                            Text("Add to AR Scene")
+                        }
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .padding()
+                        .background(Color.blue)
+                        .cornerRadius(10)
+                    }
+                    .padding(.bottom, 40)
                 }
             } else {
                 VStack(spacing: 20) {
@@ -58,24 +52,55 @@ struct ModelView: View {
                         .font(.headline)
                     Text(errorMessage)
                         .multilineTextAlignment(.center)
-                    Button("Try Again") {
-                        verifyAndShowModel()
-                    }
-                    .padding()
-                    .background(Color.blue)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
                     
-                    Button("Cancel") {
-                        endCaptureCallback()
+                    HStack(spacing: 16) {
+                        Button("Try Again") {
+                            verifyAndShowModel()
+                        }
+                        .padding()
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                        
+                        Button("Back") {
+                            dismiss()
+                        }
+                        .padding()
+                        .background(Color.gray.opacity(0.2))
+                        .foregroundColor(.primary)
+                        .cornerRadius(10)
                     }
-                    .padding()
                 }
+                .padding()
+                .background(Color(.systemBackground))
+                .cornerRadius(12)
+                .shadow(radius: 5)
                 .padding()
             }
         }
+        .fullScreenCover(isPresented: $showARView) {
+            ARSceneView(capturedModelURL: modelFile, arController: arController)
+                .environmentObject(AppDataModel.instance)
+                .edgesIgnoringSafeArea(.all)
+        }
+        .navigationBarItems(leading:
+            Button(action: { dismiss() }) {
+                HStack {
+                    Image(systemName: "chevron.left")
+                    Text("Back")
+                }
+            }
+        )
         .onAppear {
             verifyAndShowModel()
+        }
+    }
+    
+    private func dismiss() {
+        if let onDismiss = onDismiss {
+            onDismiss()
+        } else {
+            presentationMode.wrappedValue.dismiss()
         }
     }
     

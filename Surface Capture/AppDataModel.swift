@@ -8,6 +8,12 @@ import RealityKit
 import SwiftUI
 import os
 
+// Add capture type enum to differentiate between modes
+enum CaptureType {
+    case objectCapture
+    case imagePlane
+}
+
 enum AppError: Error {
     case emptyModelFile
     case modelFileNotFound
@@ -71,6 +77,13 @@ class AppDataModel: ObservableObject, Identifiable {
             }
         }
     }
+    // Image picker properties
+    @Published var captureType: CaptureType = .objectCapture
+    @Published var selectedImage: UIImage?
+    @Published var isImagePlacementMode: Bool = false
+    @Published var isShowingPlacementInstructions: Bool = false
+    @Published var isPulsing: Bool = false
+    @Published var isImagePickerPresented: Bool = false
 
     private(set) var error: Swift.Error?
 
@@ -98,8 +111,51 @@ class AppDataModel: ObservableObject, Identifiable {
         tasks.forEach { $0.cancel() }
         tasks.removeAll()
     }
+    
+    // Handle selected image
+    func handleSelectedImage(_ image: UIImage?) {
+        guard let image = image else { return }
+        
+        // Update image and state
+        selectedImage = image
+        captureType = .imagePlane
+        
+        // Create plane entity
+        if selectedModelEntity == nil {
+            selectedModelEntity = ImagePlaneEntity.create(from: image)
+        } else {
+            if let entity = selectedModelEntity {
+                //ImagePlaneEntity.updateTexture(entity, with: image)
+            }
+        }
+        
+        // Set flags for placement mode
+        isImagePlacementMode = true
+        isShowingPlacementInstructions = true
+        
+        // Cancel any ongoing object capture session
+        objectCaptureSession?.cancel()
+        objectCaptureSession = nil
+        // Important: Change state last to trigger view updates
+        state = .ready
+    }
+    
+    // Toggle image pulsing effect
+    func toggleImagePulsing() {
+        isPulsing.toggle()
+        
+        guard let entity = selectedModelEntity else { return }
+        
+        if isPulsing {
+            OpacityManager.startPulsing(entity)
+        } else {
+            OpacityManager.stopPulsing(entity)
+        }
+    }
+    
+    // MARK: - Object Capture Functionality
 
-    private func startNewCapture() -> Bool {
+    func startNewCapture() -> Bool {
         logger.log("Starting new capture...")
         guard ObjectCaptureSession.isSupported else {
             logger.error("ObjectCaptureSession not supported on this device")
@@ -385,9 +441,11 @@ class AppDataModel: ObservableObject, Identifiable {
 
         switch toState {
         case .ready:
-            guard startNewCapture() else {
-                logger.error("Failed to start new capture")
-                break
+            if captureType == .objectCapture {
+                guard startNewCapture() else {
+                    logger.error("Failed to start new capture")
+                    break
+                }
             }
         case .prepareToReconstruct:
             objectCaptureSession = nil
@@ -398,9 +456,20 @@ class AppDataModel: ObservableObject, Identifiable {
                 switchToErrorState(error: error)
             }
         case .viewing:
-            photogrammetrySession = nil
-        case .restart, .completed:
+            // If in image placement mode, don't clear photogrammetry session
+            if captureType == .objectCapture {
+                photogrammetrySession = nil
+            }
+        case .restart:
+            // Ensure we properly reset state when restarting
             reset()
+            // If we were in image plane mode, reset that too
+            if captureType == .imagePlane {
+                captureType = .objectCapture
+                isImagePlacementMode = false
+                selectedImage = nil
+                selectedModelEntity = nil
+            }
         case .failed:
             logger.error("App failed with error: \(String(describing: self.error))")
         default:

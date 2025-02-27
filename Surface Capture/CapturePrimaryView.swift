@@ -325,6 +325,9 @@ struct CapturePrimaryView: View {
     @State private var showTrackingWarning = false
     @State private var showPerformanceWarning = false
     
+    // Add state for image picker
+    @State private var isImagePickerPresented: Bool = false
+    
     private let trackingMonitor = EnhancedTrackingMonitor()
     
     var body: some View {
@@ -344,9 +347,11 @@ struct CapturePrimaryView: View {
                         }
                     }
                     .overlay(alignment: .center) {
+                        /*
                         if showPerformanceWarning {
                             WarningBanner(message: "Performance issues detected - try moving slower")
                         }
+                         */
                     }
             } else {
                 InitializationView(error: initializationError)
@@ -363,9 +368,25 @@ struct CapturePrimaryView: View {
         } message: {
             Text("Try moving the camera more slowly and ensure good lighting")
         }
+        .sheet(isPresented: $isImagePickerPresented) {
+            ImagePicker(selectedImage: $appModel.selectedImage)
+                .onDisappear {
+                    if appModel.selectedImage != nil {
+                        // Use the centralized handling
+                        appModel.handleSelectedImage(appModel.selectedImage)
+                    }
+                }
+        }
     }
     
     // MARK: - View Components
+    
+    private var isSessionReadyForCapture: Bool {
+        guard isCameraReady && !showPerformanceWarning else { return false }
+        
+        // Check that session is in a valid state
+        return session.state == .ready || session.state == .detecting
+    }
     
     private var controlsOverlay: some View {
         VStack(spacing: 20) {
@@ -391,13 +412,27 @@ struct CapturePrimaryView: View {
                     
                     Spacer()
                     
+                    // Add Image Picker Button
+                    Button(action: {
+                        isImagePickerPresented = true
+                    }) {
+                        HStack {
+                            Image(systemName: "photo.fill")
+                            Text("Image")
+                        }
+                        .foregroundColor(.white)
+                        .padding()
+                        .background(Capsule().fill(Color.green))
+                    }
+                    .padding(.horizontal, 4)
+                    
                     Button("Start Capture") {
                         startCapture()
                     }
                     .foregroundColor(.white)
                     .padding()
                     .background(Capsule().fill(Color.blue))
-                    .disabled(!isCameraReady || showPerformanceWarning)
+                    .disabled(!isSessionReadyForCapture)
                 }
             }
         }
@@ -452,13 +487,25 @@ struct CapturePrimaryView: View {
     }
     
     private func startCapture() {
+        // First check if camera is ready and there are no performance warnings
         guard isCameraReady && !showPerformanceWarning else { return }
+        
+        // Additional validation to ensure session is in a valid state for capturing
+        guard session.state == .ready || session.state == .detecting else {
+            // Show a user-facing message about the session not being ready
+            let message = "Waiting for camera to initialize. Please try again in a moment."
+            appModel.messageList.add(message)
+            
+            // Schedule removal of the message after a few seconds
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                appModel.messageList.remove(message)
+            }
+            return
+        }
         
         isCapturing = true
         
-        // TODO: Add guard in case not ready
-        
-        // Start the capture session immediately
+        // Start the capture session
         session.startCapturing()
         
         // Reset warning state
