@@ -324,6 +324,7 @@ struct CapturePrimaryView: View {
     @State private var trackingQuality: TrackingQualityStatus = .normal
     @State private var showTrackingWarning = false
     @State private var showPerformanceWarning = false
+    @State private var isSessionReady = false
     
     // Add state for image picker
     @State private var isImagePickerPresented: Bool = false
@@ -332,8 +333,10 @@ struct CapturePrimaryView: View {
     
     var body: some View {
         ZStack {
-            if isCameraReady {
+            if isSessionReady {
+                // Only show ObjectCaptureView once the session is confirmed ready
                 ObjectCaptureView(session: session)
+                    .hideObjectReticle(true)
                     .overlay(alignment: .bottom) {
                         controlsOverlay
                     }
@@ -347,18 +350,25 @@ struct CapturePrimaryView: View {
                         }
                     }
                     .overlay(alignment: .center) {
-                        /*
-                        if showPerformanceWarning {
+                        if isInitializing {
+                            InitializationView(error: initializationError)
+                        } else if showPerformanceWarning {
                             WarningBanner(message: "Performance issues detected - try moving slower")
                         }
-                         */
                     }
             } else {
-                InitializationView(error: initializationError)
+                // Show loading view while session initializes
+                VStack {
+                    ProgressView("Preparing camera...")
+                    Text("Please wait while AR tracking initializes")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding()
+                }
             }
         }
         .onAppear {
-            setupSession()
+            validateAndSetupSession()
         }
         .onDisappear {
             cleanupSession()
@@ -381,13 +391,6 @@ struct CapturePrimaryView: View {
     
     // MARK: - View Components
     
-    private var isSessionReadyForCapture: Bool {
-        guard isCameraReady && !showPerformanceWarning else { return false }
-        
-        // Check that session is in a valid state
-        return session.state == .ready || session.state == .detecting
-    }
-    
     private var controlsOverlay: some View {
         VStack(spacing: 20) {
             if session.state == .capturing {
@@ -404,14 +407,6 @@ struct CapturePrimaryView: View {
                 }
             } else {
                 HStack {
-                    Button("Cancel") {
-                        appModel.objectCaptureSession?.cancel()
-                    }
-                    .foregroundColor(.white)
-                    .padding()
-                    
-                    Spacer()
-                    
                     // Add Image Picker Button
                     Button(action: {
                         isImagePickerPresented = true
@@ -431,8 +426,9 @@ struct CapturePrimaryView: View {
                     }
                     .foregroundColor(.white)
                     .padding()
-                    .background(Capsule().fill(Color.blue))
-                    .disabled(!isSessionReadyForCapture)
+                    .background(Capsule().fill((isCameraReady && !isInitializing) ? Color.blue : Color.gray.opacity(0.6)))
+                    .opacity((isCameraReady && !isInitializing) ? 1.0 : 0.7)
+                    .disabled(!(isCameraReady && !isInitializing))
                 }
             }
         }
@@ -441,27 +437,246 @@ struct CapturePrimaryView: View {
     
     // MARK: - Helper Methods
     
-    private func setupSession() {
+    private func validateAndSetupSession() {
+        // Ensure the session is properly initialized before showing the view
+        isSessionReady = false
+        isCameraReady = false
+        isInitializing = true
+        
+        // Make sure the session has been started and is in a valid state
+        // Commenting out this block properly with a single-line comment style
+        // if session.state == .failed {
+        //     print("Session already in failed state on appearance")
+        //     initializationError = CameraError.initializationTimeout
+        //     return
+        // }
+        
+        // Start with a task to monitor the session state
+        Task {
+            // Add a timeout to prevent indefinite waiting
+            let timeout = Task {
+                try await Task.sleep(for: .seconds(1.8))
+                await MainActor.run {
+                    // Force readiness if timeout occurs to avoid blocking the user
+                    if !isSessionReady {
+                        print("Session readiness timeout - forcing readiness")
+                        isSessionReady = true
+                        isCameraReady = true
+                        isInitializing = false
+                    }
+                }
+            }
+            
+            // Monitor session state changes to detect when it's ready
+            do {
+                // Make the await call itself throw with 'try' before it
+                let stateUpdates = try session.stateUpdates
+                
+                for await state in stateUpdates {
+                    await MainActor.run {
+                        print("Session state updated to: \(state)")
+                        
+                        // Use a switch statement for proper pattern matching with multiple cases
+                        switch state {
+                        case .ready, .detecting, .capturing:
+                            // These are the states we consider "ready"
+                            isSessionReady = true
+                            isCameraReady = true
+                            isInitializing = false
+                            timeout.cancel() // Cancel the timeout once ready
+                            
+                        case .failed(let error):
+                            print("Session failed: \(error)")
+                            initializationError = error
+                            isSessionReady = true // Show the view with error
+                            isInitializing = false
+                            timeout.cancel()
+                            
+                        default:
+                            // For other states like initializing, we don't change the ready state
+                            break
+                        }
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    print("Error monitoring session state: \(error)")
+                    isSessionReady = true
+                    isInitializing = false
+                    timeout.cancel()
+                }
+            }
+        }
+        
+        // Setup UI applications and tracking monitor
         UIApplication.shared.isIdleTimerDisabled = true
         
-        // Monitor memory warnings
+        // Start tracking monitor after confirming the session is valid
+        trackingMonitor.startMonitoring(session: session) { quality, stats in
+            Task { @MainActor in
+                self.trackingQuality = quality
+                print("Tracking Quality: \(quality)")
+                self.showPerformanceWarning = stats.hasResourceConstraints
+            }
+        }
+        
+        // Listen for ARKit session notifications
+        setupARKitNotifications()
+    }
+    
+    private func setupARKitNotifications() {
+        // Listen for ARKit tracking state changes
+        NotificationCenter.default.addObserver(
+            forName: .ARSessionTrackingStateChanged,
+            object: nil,
+            queue: .main) { _ in
+                if !self.isCameraReady {
+                    print("AR tracking state changed")
+                    _ = self.checkARTrackingStatus() // Use underscore to explicitly ignore result
+                }
+        }
+        
+        // Listen for ARKit session activation
+        NotificationCenter.default.addObserver(
+            forName: .ARSessionDidBecomeActive,
+            object: nil,
+            queue: .main) { _ in
+                print("AR Session became active")
+                self.isCameraReady = true
+                self.isInitializing = false
+        }
+        
+        // Memory warning monitoring
         NotificationCenter.default.addObserver(
             forName: UIApplication.didReceiveMemoryWarningNotification,
             object: nil,
             queue: .main) { _ in
-                showPerformanceWarning = true
-            }
+                self.showPerformanceWarning = true
+        }
+    }
+    
+    private func checkARTrackingStatus() -> Bool {
+        // We can't directly access ARView in a SwiftUI view
+        // Instead, make a reasonable assumption based on session state
+        if session.state == .ready || session.state == .detecting {
+            print("Session appears to be in a ready state")
+            self.isCameraReady = true
+            self.isInitializing = false
+            return true
+        }
+        return false
+    }
+    
+    private func setupSession() {
+        UIApplication.shared.isIdleTimerDisabled = true
         
-        // Start monitoring immediately
+        // Start with disabled button
+        isCameraReady = false
+        isInitializing = true
+        
+        // Start tracking monitor
         trackingMonitor.startMonitoring(session: session) { quality, stats in
             Task { @MainActor in
-                trackingQuality = quality
-                showPerformanceWarning = stats.hasResourceConstraints
+                self.trackingQuality = quality
+                print("********** Tracking Quality: \(quality)")
+                self.showPerformanceWarning = stats.hasResourceConstraints
             }
         }
         
-        // Initialize camera immediately
-        startCameraInitialization()
+        // 1. APPROACH: Listen for ARKit tracking state changes
+        NotificationCenter.default.addObserver(
+            forName: .ARSessionTrackingStateChanged,
+            object: nil,
+            queue: .main) { _ in
+                _ = self.checkARTrackingStatus() // Using underscore to explicitly ignore result
+                print("Tracking status: \(self.checkARTrackingStatus())")
+        }
+        
+        // 2. APPROACH: Listen for ARKit session running notifications
+        NotificationCenter.default.addObserver(
+            forName: .ARSessionDidBecomeActive,
+            object: nil,
+            queue: .main) { _ in
+                print("AR Session became active")
+                self.isCameraReady = true
+                self.isInitializing = false
+        }
+        
+        // 3. APPROACH: Continue monitoring session state updates directly
+        Task {
+            do {
+                for try await state in session.stateUpdates {
+                    await MainActor.run {
+                        print("ObjectCaptureSession state: \(state)")
+                        // When we see a ready state, enable the capture button
+                        if case .ready = state {
+                            self.isCameraReady = true
+                            self.isInitializing = false
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 4. APPROACH: Memory warning monitoring (as you had before)
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil,
+            queue: .main) { _ in
+                //showPerformanceWarning = true
+        }
+        
+        // 5. APPROACH: Fallback timer after a reasonable delay
+        //DispatchQueue.main.asyncAfter(deadline: .now()) {
+            // Using explicit comparison instead of negation to avoid syntax issues
+            if self.isCameraReady == false {
+                print("Fallback timer activating camera readiness")
+                self.isCameraReady = true
+                self.isInitializing = false
+            }
+        //}
+        
+
+    }
+
+    private func checkSessionReady() {
+        // Check immediately, then at increasing intervals
+        let checkIntervals = [0.5, 1.0, 2.0, 3.0, 5.0]
+        
+        for (index, interval) in checkIntervals.enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + interval) {
+                if session.state == .ready || session.state == .detecting {
+                    isCameraReady = true
+                    isInitializing = false
+                } else if index == checkIntervals.count - 1 {
+                    // Last attempt, session still not ready
+                    if !isCameraReady {
+                        isCameraReady = true  // Just enable it anyway at this point
+                        isInitializing = false
+                    }
+                }
+            }
+        }
+    }
+
+    private func startCameraInitialization() {
+        isInitializing = true
+        
+        /*
+         // Add timeout just in case
+         Task { @MainActor in
+         //try? await Task.sleep(for: .seconds(0))
+         if !isCameraReady {
+         initializationError = CameraError.initializationTimeout
+         }
+         }
+         */
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            isCameraReady = true
+            isInitializing = false
+        }
+        // Make camera ready immediately - this worked in the original code
+        
     }
     
     private func cleanupSession() {
@@ -470,25 +685,11 @@ struct CapturePrimaryView: View {
         NotificationCenter.default.removeObserver(self)
     }
     
-    private func startCameraInitialization() {
-        isInitializing = true
-        
-        // Add timeout just in case
-        Task { @MainActor in
-            //try? await Task.sleep(for: .seconds(0))
-            if !isCameraReady {
-                initializationError = CameraError.initializationTimeout
-            }
-        }
-        
-        // Make camera ready immediately - this worked in the original code
-        isCameraReady = true
-        isInitializing = false
-    }
-    
     private func startCapture() {
         // First check if camera is ready and there are no performance warnings
         guard isCameraReady && !showPerformanceWarning else { return }
+        
+        print("Session state before starting capture: \(session.state)")
         
         // Additional validation to ensure session is in a valid state for capturing
         guard session.state == .ready || session.state == .detecting else {
@@ -503,10 +704,9 @@ struct CapturePrimaryView: View {
             return
         }
         
-        isCapturing = true
-        
         // Start the capture session
         session.startCapturing()
+        isCapturing = true
         
         // Reset warning state
         showPerformanceWarning = false
@@ -537,4 +737,9 @@ struct CapturePrimaryView: View {
             return "❌ Tracking lost"
         }
     }
+}
+
+extension Notification.Name {
+    static let ARSessionTrackingStateChanged = Notification.Name("ARSessionTrackingStateChanged")
+    static let ARSessionDidBecomeActive = Notification.Name("ARSessionDidBecomeActive")
 }

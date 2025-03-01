@@ -16,6 +16,7 @@ struct ContentView: View {
     @State private var capturedModelURL: URL?
     @State private var showReconstructionView: Bool = false
     @State private var showErrorAlert: Bool = false
+    @State private var sessionInitializing: Bool = false
     
     private var showProgressView: Bool {
         appModel.state == .completed || appModel.state == .restart || appModel.state == .ready
@@ -36,8 +37,20 @@ struct ContentView: View {
                 }
                 .edgesIgnoringSafeArea(.all)
             } else if appModel.state == .capturing {
-                if let session = appModel.objectCaptureSession {
+                if let session = appModel.objectCaptureSession, !sessionInitializing {
+                    // Only show the CapturePrimaryView when session is ready
                     CapturePrimaryView(session: session)
+                        .environmentObject(appModel)
+                } else {
+                   /*
+                    // Show a loading view while session initializes
+                    VStack {
+                        CircularProgressView()
+                        Text("Initializing camera...")
+                            .font(.headline)
+                            .padding()
+                    }
+                    */
                 }
             } else if appModel.state == .reconstructing || appModel.state == .prepareToReconstruct {
                 // Show progress view during reconstruction
@@ -61,7 +74,26 @@ struct ContentView: View {
         .onChange(of: appModel.state) { _, newState in
             ContentView.logger.debug("State changed to: \(newState)")
             
-            if newState == .failed {
+            if newState == .capturing {
+                // When transitioning to capturing state, set initializing to true briefly
+                // to ensure the session is properly set up before showing the capture view
+                /*
+                sessionInitializing = true
+                
+                // Check session state after a short delay to let initialization complete
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    if let session = appModel.objectCaptureSession {
+                        if case .failed = session.state {
+                            showErrorAlert = true
+                        } else {
+                            sessionInitializing = false
+                        }
+                    } else {
+                        // No session available
+                        showErrorAlert = true
+                    }
+                }*/
+            } else if newState == .failed {
                 showErrorAlert = true
                 showReconstructionView = false
                 
@@ -77,6 +109,7 @@ struct ContentView: View {
                 
                 capturedModelURL = nil
                 showReconstructionView = false
+                sessionInitializing = false
                 appModel.state = .ready
             }
         }

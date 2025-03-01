@@ -20,8 +20,12 @@ struct ARSceneView: View {
                 viewController: arController
             )
             .edgesIgnoringSafeArea(.all)
-            
-            // Top Navigation Buttons
+            .onAppear {
+                print("ARSceneView appeared")
+                // Explicitly disable any coaching overlays
+                arController.removeCoachingOverlay()
+            }
+            // Top Navigation Buttons - Now with better safe area handling
             VStack {
                 HStack {
                     // Back Button
@@ -46,7 +50,6 @@ struct ARSceneView: View {
                     .background(Color.black.opacity(0.7))
                     .clipShape(Circle())
                     .padding(.leading, 20)
-                    .padding(.top, 20)
                     
                     Spacer()
                     
@@ -62,10 +65,13 @@ struct ARSceneView: View {
                     .background(Color.black.opacity(0.7))
                     .clipShape(Circle())
                     .padding(.trailing, 20)
-                    .padding(.top, 20)
                 }
+                // Move buttons down enough to clear status bar and provide some spacing
+                .padding(.top, 60) // This value works well on most devices
+                
                 Spacer()
             }
+            .edgesIgnoringSafeArea(.top) // Allow content to extend under status bar
             
             // UI Overlays
             VStack {
@@ -274,7 +280,6 @@ struct ARSceneView: View {
         }
     }
 }
-
 
 struct ARPlaneCaptureView: UIViewControllerRepresentable {
     let capturedModelURL: URL?

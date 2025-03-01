@@ -64,11 +64,11 @@ class AppDataModel: ObservableObject, Identifiable {
             attachListeners()
         }
     }
-    static let minNumImages = 3
+    static let minNumImages = 5
     private(set) var photogrammetrySession: PhotogrammetrySession?
     private(set) var scanFolderManager: CaptureFolderManager!
     @Published var messageList = TimedMessageList()
-    @Published var modelOpacity: Double = 0.9 // Default opacity
+    @Published var modelOpacity: Double = 0.9
     @Published var state: ModelState = .notSet {
         didSet {
             logger.debug("didSet AppDataModel.state to \(self.state)")
@@ -158,10 +158,10 @@ class AppDataModel: ObservableObject, Identifiable {
     func startNewCapture() -> Bool {
         logger.log("Starting new capture...")
         guard ObjectCaptureSession.isSupported else {
-            logger.error("ObjectCaptureSession not supported on this device")
+            logger.error("Your device isn't equipt to perform object capture")
             return false
         }
-
+        
         guard let folderManager = CaptureFolderManager() else {
             logger.error("Failed to create folder manager")
             return false

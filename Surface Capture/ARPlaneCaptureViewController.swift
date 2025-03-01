@@ -303,11 +303,30 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         arView.addGestureRecognizer(tapGesture)
         
         // Set up coaching overlay
-        let coachingOverlay = ARCoachingOverlayView()
-        coachingOverlay.session = arView.session
-        coachingOverlay.goal = .horizontalPlane
-        coachingOverlay.frame = arView.bounds
-        arView.addSubview(coachingOverlay)
+        
+        if !isModelPlaced && capturedPlaneModel == nil {
+            let coachingOverlay = ARCoachingOverlayView()
+            coachingOverlay.session = arView.session
+            coachingOverlay.goal = .horizontalPlane
+            coachingOverlay.frame = arView.bounds
+            coachingOverlay.tag = 1001  // Tag for easy identification later
+            arView.addSubview(coachingOverlay)
+            
+            // Auto-dismiss coaching overlay after initial plane detection
+            arView.scene.subscribe(to: SceneEvents.Update.self) { [weak self, weak coachingOverlay] _ in
+                guard let self = self, let coachingOverlay = coachingOverlay else { return }
+                
+                // Check if we have detected planes
+                let hasDetectedPlanes = !self.arView.scene.anchors.filter { $0 is AnchorEntity }.isEmpty
+                
+                if hasDetectedPlanes && coachingOverlay.isActive {
+                    // When we've detected planes, hide the coaching overlay
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                        coachingOverlay.setActive(false, animated: true)
+                    }
+                }
+            }.store(in: &cancellables)
+        }
         
         // Track newly added anchors
         arView.scene.subscribe(to: SceneEvents.Update.self) { [weak self] _ in
@@ -642,18 +661,6 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
                 activeAnchors.insert(newAnchor)
             }
         }
-        /*
-         if let arView = sender.view as? ARView {
-         let tapLocation = sender.location(in: arView)
-         if let raycastResult = arView.raycast(from: tapLocation, allowing: .estimatedPlane, alignment: .any).first {
-         let newAnchor = AnchorEntity(world: raycastResult.worldTransform)
-         capturedPlaneModel.position = [0, 0, 0]
-         newAnchor.addChild(capturedPlaneModel)
-         arView.scene.addAnchor(newAnchor)
-         }
-         }
-         */
-        
     }
     
     @objc internal func increaseOpacity() {
@@ -790,6 +797,12 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         outlineEntity = nil
     }
     
+    func removeCoachingOverlay() {
+        if let coachingOverlay = arView?.subviews.first(where: { $0 is ARCoachingOverlayView }) as? ARCoachingOverlayView {
+            coachingOverlay.setActive(false, animated: true)
+            coachingOverlay.removeFromSuperview()
+        }
+    }
     
     func loadCapturedModel(_ modelURL: URL) {
         print("Starting to load model from URL: \(modelURL)")

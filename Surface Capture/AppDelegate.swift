@@ -5,6 +5,7 @@
 
 import UIKit
 import SwiftUI
+import AVFoundation
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -16,6 +17,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Prevent screen from sleeping during capture
         UIApplication.shared.isIdleTimerDisabled = true
 
+        do {
+            let audioSession = AVAudioSession.sharedInstance()
+            try audioSession.setCategory(.ambient, mode: .default)
+            try audioSession.setActive(true)
+        } catch {
+            print("Failed to set up audio session: \(error)")
+        }
+        
         // Create the SwiftUI view that provides the window contents.
         let contentView = ContentView()
 
