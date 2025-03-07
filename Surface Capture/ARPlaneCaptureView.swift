@@ -28,19 +28,25 @@ struct ARSceneView: View {
             // Top Navigation Buttons - Now with better safe area handling
             VStack {
                 HStack {
-                    // Back Button
+                    // Back Button - Different action depending on mode
                     Button(action: {
-                        // Reset everything and go back to capture state
-                        arController.clearARScene()
-                        
-                        // This is critical - we need to reset the image plane mode flags
-                        appModel.isImagePlacementMode = false
-                        appModel.selectedImage = nil
-                        appModel.selectedModelEntity = nil
-                        appModel.captureType = .objectCapture // Reset to object capture mode
-                        
-                        // Then reset the state to restart like we do in object capture mode
-                        appModel.state = .restart
+                        if arController.isWorkModeActive {
+                            // Exit work mode and return to normal mode
+                            arController.isWorkModeActive = false
+                            arController.isStreamingActive = false
+                        } else {
+                            // Reset everything and go back to capture state
+                            arController.clearARScene()
+                            
+                            // This is critical - we need to reset the image plane mode flags
+                            appModel.isImagePlacementMode = false
+                            appModel.selectedImage = nil
+                            appModel.selectedModelEntity = nil
+                            appModel.captureType = .objectCapture // Reset to object capture mode
+                            
+                            // Then reset the state to restart like we do in object capture mode
+                            appModel.state = .restart
+                        }
                     }) {
                         Image(systemName: "chevron.left")
                             .font(.system(size: 20, weight: .bold))
@@ -53,18 +59,52 @@ struct ARSceneView: View {
                     
                     Spacer()
                     
-                    // Placeholder Button
-                    Button(action: {
-                        // Future functionality
-                    }) {
-                        Image(systemName: "ellipsis")
-                            .font(.system(size: 20))
+                    // Show mode indicator in work mode
+                    if arController.isWorkModeActive {
+                        Text("Work Mode")
+                            .font(.headline)
                             .foregroundColor(.white)
-                            .frame(width: 40, height: 40)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.green.opacity(0.7))
+                            .cornerRadius(10)
                     }
-                    .background(Color.black.opacity(0.7))
-                    .clipShape(Circle())
-                    .padding(.trailing, 20)
+                    
+                    Spacer()
+                    
+                    // Work Mode / Streaming Button depending on context
+                    if arController.isWorkModeActive {
+                        // Streaming toggle button in work mode
+                        Button(action: {
+                            arController.isStreamingActive.toggle()
+                        }) {
+                            Image(systemName: arController.isStreamingActive ? "wifi" : "wifi.slash")
+                                .font(.system(size: 20))
+                                .foregroundColor(.white)
+                                .frame(width: 40, height: 40)
+                        }
+                        .background(arController.isStreamingActive ? Color.blue.opacity(0.7) : Color.black.opacity(0.7))
+                        .clipShape(Circle())
+                        .padding(.trailing, 20)
+                    } else {
+                        // Work Mode Button in normal mode
+                        Button(action: {
+                            arController.isWorkModeActive.toggle()
+                            // When entering work mode, ensure model isn't selected
+                            if arController.isWorkModeActive {
+                                arController.isModelSelected = false
+                                arController.updateModelHighlight(isSelected: false)
+                            }
+                        }) {
+                            Image(systemName: "eye")
+                                .font(.system(size: 20))
+                                .foregroundColor(.white)
+                                .frame(width: 40, height: 40)
+                        }
+                        .background(Color.black.opacity(0.7))
+                        .clipShape(Circle())
+                        .padding(.trailing, 20)
+                    }
                 }
                 // Move buttons down enough to clear status bar and provide some spacing
                 .padding(.top, 60) // This value works well on most devices
@@ -73,7 +113,7 @@ struct ARSceneView: View {
             }
             .edgesIgnoringSafeArea(.top) // Allow content to extend under status bar
             
-            // UI Overlays
+            // UI Overlays based on current mode
             VStack {
                 Spacer()
                 
@@ -90,22 +130,60 @@ struct ARSceneView: View {
                 
                 // Only show control buttons if model is placed
                 if arController.isModelPlaced {
-                    // Bottom Controls
-                    HStack(spacing: 30) {
-                        // Pulse Button
-                        Button(action: {
-                            arController.togglePulsing()
-                        }) {
-                            Image(systemName: "waveform.path")
-                                .font(.system(size: 20))
-                                .foregroundColor(.white)
-                                .frame(width: 40, height: 40)
+                    if arController.isWorkModeActive {
+                        // Work Mode Controls
+                        HStack(spacing: 30) {
+                            // Pulse Button
+                            Button(action: {
+                                arController.togglePulsing()
+                            }) {
+                                Image(systemName: "waveform.path")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(.white)
+                                    .frame(width: 40, height: 40)
+                            }
+                            .background(arController.isPulsing ? Color.green.opacity(0.7) : Color.black.opacity(0.7))
+                            .clipShape(Circle())
+                            
+                            // Streaming Button
+                            Button(action: {
+                                arController.isStreamingActive.toggle()
+                            }) {
+                                Image(systemName: arController.isStreamingActive ? "arrow.triangle.2.circlepath.circle.fill" : "arrow.triangle.2.circlepath.circle")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(.white)
+                                    .frame(width: 40, height: 40)
+                            }
+                            .background(arController.isStreamingActive ? Color.blue.opacity(0.7) : Color.black.opacity(0.7))
+                            .clipShape(Circle())
                         }
-                        .background(arController.isPulsing ? Color.green.opacity(0.7) : Color.black.opacity(0.7))
-                        .clipShape(Circle())
+                        .padding(.bottom, 20)
                         
-                        // Only show lock controls if not in work mode
-                        if !arController.isWorkModeActive {
+                        // Show streaming status if active
+                        if arController.isStreamingActive {
+                            Text("AR Scene Streaming Active")
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(Color.blue.opacity(0.7))
+                                .cornerRadius(10)
+                                .padding(.bottom, 20)
+                        }
+                    } else {
+                        // Normal Mode Controls
+                        HStack(spacing: 30) {
+                            // Pulse Button
+                            Button(action: {
+                                arController.togglePulsing()
+                            }) {
+                                Image(systemName: "waveform.path")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(.white)
+                                    .frame(width: 40, height: 40)
+                            }
+                            .background(arController.isPulsing ? Color.green.opacity(0.7) : Color.black.opacity(0.7))
+                            .clipShape(Circle())
+                            
                             // Rotation Lock
                             Button(action: {
                                 arController.lockedRotation.toggle()
@@ -142,13 +220,13 @@ struct ARSceneView: View {
                             .background(arController.lockedPosition ? Color.red.opacity(0.7) : Color.black.opacity(0.7))
                             .clipShape(Circle())
                         }
+                        .padding(.bottom, 20)
                     }
-                    .padding(.bottom, 20)
                 }
             }
             
-            // Model Controls when selected
-            if arController.isModelSelected {
+            // Model Controls when selected - only show if not in work mode
+            if arController.isModelSelected && !arController.isWorkModeActive {
                 HStack {
                     VStack(spacing: 15) {
                         // Auto-align button
@@ -286,14 +364,14 @@ struct ARSceneView: View {
                         VStack(spacing: 12) {
                             // Z-depth adjustment
                             Button(action: {
-                                arController.modelManipulator.startManipulation(.adjustingDepth)
+                                arController.toggleDepthAdjustment()
                             }) {
                                 Image(systemName: "arrow.up.and.down.and.arrow.left.and.right")
                                     .font(.system(size: 20))
-                                    .foregroundColor(.white)
+                                    .foregroundColor(arController.isAdjustingDepth ? .yellow : .white)
                                     .frame(width: 40, height: 40)
                             }
-                            .background(arController.currentManipulationState == .adjustingDepth ? Color.green.opacity(0.7) : Color.black.opacity(0.7))
+                            .background(arController.isAdjustingDepth ? Color.green.opacity(0.7) : Color.black.opacity(0.5))
                             .clipShape(Circle())
                         }
                     }

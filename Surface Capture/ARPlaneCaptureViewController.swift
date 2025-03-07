@@ -37,10 +37,12 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
     @Published var lockedRotation: Bool = false
     @Published var lockedScale: Bool = false
     @Published var isWorkModeActive: Bool = false
-    
+    @Published var isStreamingActive: Bool = false
+
     var mode: CaptureType = .objectCapture
     
     // Add these properties to track toggle states
+    @Published var isAdjustingDepth: Bool = false
     @Published var isRotatingX: Bool = false
     @Published var isRotatingY: Bool = false
     @Published var isRotatingZ: Bool = false
@@ -204,7 +206,8 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         lockedRotation = false
         lockedScale = false
         isWorkModeActive = false
-        
+        isStreamingActive = false
+
         // Stop AR session and remove all anchors
         arView?.session.pause()
         
@@ -369,24 +372,42 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
     }
     
     @objc private func handleRotation(_ gesture: UIRotationGestureRecognizer) {
-        guard !lockedRotation, let modelEntity = capturedPlaneModel,
+        guard !isWorkModeActive, !lockedRotation, let modelEntity = capturedPlaneModel,
               modelManipulator.currentState == .none else { return }
         
         if gesture.state == .began {
+            // Reset lastRotation for this gesture
             lastRotation = .zero
+            // Store the current orientation at gesture start
+            initialGestureOrientation = modelEntity.orientation
         }
         
-        let rotation = Angle(radians: Double(gesture.rotation)) + accumulatedRotation
-        modelEntity.transform.rotation = simd_quatf(angle: Float(rotation.radians), axis: [0, -1, 0])
-        lastRotation = rotation
+        // The current gesture rotation (without accumulation from previous gestures)
+        let currentGestureRotation = Angle(radians: Double(gesture.rotation))
         
+        // Create rotation quaternion just for this gesture movement
+        let deltaRotation = simd_quatf(angle: Float(currentGestureRotation.radians), axis: [0, -1, 0])
+        
+        // Apply this delta rotation to the orientation from when the gesture began
+        if let startOrientation = initialGestureOrientation {
+            modelEntity.orientation = deltaRotation * startOrientation
+        }
+        
+        // When the gesture ends, we don't reset anything - the model keeps its current orientation
         if gesture.state == .ended {
-            accumulatedRotation = rotation
+            // Clear the initial orientation reference
+            initialGestureOrientation = nil
+            
+            // Important: We don't reset rotation values here, so the next gesture
+            // will start from wherever this one left off
         }
     }
+
+    // Add this property to ARPlaneCaptureViewController class if it doesn't exist:
+    private var initialGestureOrientation: simd_quatf?
     
     @objc private func handlePinch(_ gesture: UIPinchGestureRecognizer) {
-        guard !lockedScale, let modelEntity = capturedPlaneModel,
+        guard !isWorkModeActive, !lockedScale, let modelEntity = capturedPlaneModel,
               modelManipulator.currentState == .none else { return }
         
         if gesture.state == .began {
@@ -394,7 +415,9 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         }
         
         let scale = Float(gesture.scale) / Float(lastScale)
+        
         modelEntity.transform.scale *= SIMD3<Float>(repeating: scale)
+        
         lastScale = gesture.scale
         
         if gesture.state == .ended {
@@ -403,7 +426,7 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
     }
     
     @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
-        guard !lockedPosition, let modelEntity = capturedPlaneModel,
+        guard !isWorkModeActive, !lockedPosition, let modelEntity = capturedPlaneModel,
               modelManipulator.currentState == .none else { return }
         
         guard let arView = gesture.view as? ARView else { return }
@@ -710,6 +733,8 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
     
     @objc func handleTap(_ sender: UITapGestureRecognizer) {
         
+        guard !isWorkModeActive else { return }
+        
         guard let capturedPlaneModel = self.capturedPlaneModel,
               modelManipulator.currentState == .none else { return }
         
@@ -809,6 +834,9 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
     }
     
     @objc func handleModelManipulation(_ gesture: UIPanGestureRecognizer) {
+        
+        guard !isWorkModeActive, let modelEntity = capturedPlaneModel, isModelSelected else { return }
+        
         guard let modelEntity = capturedPlaneModel, isModelSelected else { return }
         
         let location = gesture.location(in: arView)
@@ -888,6 +916,21 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         if let coachingOverlay = arView?.subviews.first(where: { $0 is ARCoachingOverlayView }) as? ARCoachingOverlayView {
             coachingOverlay.setActive(false, animated: true)
             coachingOverlay.removeFromSuperview()
+        }
+    }
+    
+    func toggleStreamMode() {
+        isStreamingActive.toggle()
+        
+        if isStreamingActive {
+            // Placeholder for real streaming functionality
+            // This would connect to another device, perhaps using MultipeerConnectivity
+            print("Streaming mode activated")
+            showToast(message: "Streaming started")
+        } else {
+            // Stop streaming
+            print("Streaming mode deactivated")
+            showToast(message: "Streaming stopped")
         }
     }
     
@@ -1060,6 +1103,25 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
             modelManipulator.setCurrentRotation(alignmentRotation)
             modelManipulator.saveCurrentTransform()  // Save this as the new baseline transform
         }
+    }
+    
+    func toggleDepthAdjustment() {
+        // Turn off other manipulation modes
+        isRotatingX = false
+        isRotatingY = false
+        isRotatingZ = false
+        
+        // Toggle depth adjustment
+        isAdjustingDepth.toggle()
+        
+        if isAdjustingDepth {
+            modelManipulator.startManipulation(.adjustingDepth)
+        } else {
+            modelManipulator.endManipulation()
+        }
+        
+        // Force UI update
+        objectWillChange.send()
     }
     
     func toggleRotationX() {
