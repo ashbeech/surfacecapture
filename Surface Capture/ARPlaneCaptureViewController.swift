@@ -7,6 +7,7 @@ import SwiftUI
 import RealityKit
 import ARKit
 import Combine
+import ModelIO
 
 class ARPlaneCaptureViewController: UIViewController, ObservableObject {
     
@@ -38,6 +39,11 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
     @Published var isWorkModeActive: Bool = false
     
     var mode: CaptureType = .objectCapture
+    
+    // Add these properties to track toggle states
+    @Published var isRotatingX: Bool = false
+    @Published var isRotatingY: Bool = false
+    @Published var isRotatingZ: Bool = false
     
     init(mode: CaptureType, entity: ModelEntity? = nil) {
         self.mode = mode
@@ -85,6 +91,11 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         setupARView()
         setupGestures()
         setupModelManipulationGesture()
+        
+        // Set up model manipulator with the model entity
+        if let modelEntity = capturedPlaneModel {
+            modelManipulator.setModelEntity(modelEntity)
+        }
     }
     
     // Override view lifecycle methods
@@ -395,9 +406,85 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         guard !lockedPosition, let modelEntity = capturedPlaneModel,
               modelManipulator.currentState == .none else { return }
         
+        guard let arView = gesture.view as? ARView else { return }
+        
         let translation = gesture.translation(in: gesture.view)
-        let delta = SIMD3<Float>(Float(translation.x / 1000.0), 0, Float(translation.y / 1000.0))
-        modelEntity.transform.translation += delta
+        
+        // Get camera transform
+        let cameraTransform = arView.cameraTransform
+        
+        // Get the camera's right and forward vectors from transform matrix
+        let rightVector = SIMD3<Float>(
+            cameraTransform.matrix.columns.0.x,
+            cameraTransform.matrix.columns.0.y,
+            cameraTransform.matrix.columns.0.z
+        )
+        
+        let forwardVector = SIMD3<Float>(
+            -cameraTransform.matrix.columns.2.x,
+            -cameraTransform.matrix.columns.2.y,
+            -cameraTransform.matrix.columns.2.z
+        )
+        
+        // Scale factors (adjusted for better control)
+        let horizontalScale = Float(translation.x / 500.0)
+        let verticalScale = Float(translation.y / 500.0)
+        
+        if let anchorEntity = currentAnchor {
+            // Get the anchor's up vector (normal to the plane)
+            let anchorTransform = anchorEntity.transformMatrix(relativeTo: nil)
+            let anchorUpVector = SIMD3<Float>(
+                anchorTransform.columns.1.x,
+                anchorTransform.columns.1.y,
+                anchorTransform.columns.1.z
+            )
+            
+            // Get camera's up vector
+            let cameraUpVector = SIMD3<Float>(
+                cameraTransform.matrix.columns.1.x,
+                cameraTransform.matrix.columns.1.y,
+                cameraTransform.matrix.columns.1.z
+            )
+            
+            // Project camera's right vector onto anchor plane
+            let planeNormal = normalize(anchorUpVector)
+            let projectedRight = normalize(rightVector - (dot(rightVector, planeNormal) * planeNormal))
+            
+            // Create a new up vector for movement that's based on the camera's view
+            // but projected onto the anchor plane
+            let tempUp = cross(projectedRight, planeNormal)
+            let projectedUp = normalize(tempUp - (dot(tempUp, planeNormal) * planeNormal))
+            
+            // Determine if we're looking at the plane from the "back" side
+            let viewDirection = normalize(forwardVector)
+            let dotProduct = dot(viewDirection, planeNormal)
+            
+            // Adjust movement based on viewing angle
+            let finalRight = projectedRight
+            let finalUp = dotProduct > 0 ? -projectedUp : projectedUp
+            
+            // Calculate movement in world space
+            let movementVector = (finalRight * horizontalScale) + (finalUp * verticalScale)
+            
+            // Transform movement into anchor space
+            let worldToAnchorTransform = anchorTransform.inverse
+            let movement4 = worldToAnchorTransform * SIMD4<Float>(movementVector.x, movementVector.y, movementVector.z, 0)
+            
+            // Apply the movement in local space
+            modelEntity.position += SIMD3<Float>(movement4.x, movement4.y, movement4.z)
+        } else {
+            // Fallback to world space movement if no anchor
+            // Project vectors onto horizontal plane for consistency
+            let horizontalRight = SIMD3<Float>(rightVector.x, 0, rightVector.z)
+            let horizontalForward = SIMD3<Float>(forwardVector.x, 0, forwardVector.z)
+            
+            let normalizedRight = length(horizontalRight) > 0.001 ? normalize(horizontalRight) : SIMD3<Float>(1, 0, 0)
+            let normalizedForward = length(horizontalForward) > 0.001 ? normalize(horizontalForward) : SIMD3<Float>(0, 0, 1)
+            
+            let movementVector = (normalizedRight * horizontalScale) + (normalizedForward * verticalScale)
+            modelEntity.transform.translation += movementVector
+        }
+        
         lastPanLocation = gesture.location(in: gesture.view)
         gesture.setTranslation(.zero, in: gesture.view)
     }
@@ -849,7 +936,9 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
                 }
                 
                 self.capturedPlaneModel = modelEntity
-                print("Model assigned to capturedPlaneModel")
+                
+                // Initialize the model manipulator with this entity
+                modelManipulator.setModelEntity(modelEntity)
                 
                 showToast(message: "Model loaded successfully")
             } catch {
@@ -904,6 +993,127 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
                 toast.removeFromSuperview()
             })
         })
+    }
+    
+    func autoAlignModelWithSurface() {
+        guard let modelEntity = capturedPlaneModel else { return }
+        
+        // Generate collision shapes to ensure we have geometry to work with
+        modelEntity.generateCollisionShapes(recursive: true)
+        
+        // Create a simplified approach using the model's bounding box
+        let boundingBox = modelEntity.visualBounds(relativeTo: nil)
+        
+        // Get the dimensions of the bounding box
+        let size = boundingBox.extents
+        
+        // Determine which dimension is smallest (this is likely the "thickness" direction)
+        var smallestDimension = 0
+        var smallestValue = size.x
+        
+        if size.y < smallestValue {
+            smallestDimension = 1
+            smallestValue = size.y
+        }
+        
+        if size.z < smallestValue {
+            smallestDimension = 2
+        }
+        
+        // Create a normal vector pointing in the direction of the smallest dimension
+        var primaryNormal = SIMD3<Float>(0, 0, 0)
+        switch smallestDimension {
+        case 0:
+            primaryNormal = SIMD3<Float>(1, 0, 0)
+        case 1:
+            primaryNormal = SIMD3<Float>(0, 1, 0)
+        case 2:
+            primaryNormal = SIMD3<Float>(0, 0, 1)
+        default:
+            break
+        }
+        
+        // Transform the normal to world space
+        primaryNormal = modelEntity.convert(direction: primaryNormal, to: nil)
+        
+        // 2. Get the anchor plane's normal (usually [0, 1, 0] for horizontal surfaces)
+        guard let arView = arView,
+              let raycast = arView.raycast(from: arView.center, 
+                                         allowing: .estimatedPlane, 
+                                         alignment: .any).first else { return }
+        
+        let anchorNormal = SIMD3<Float>(raycast.worldTransform.columns.1.x,
+                                       raycast.worldTransform.columns.1.y,
+                                       raycast.worldTransform.columns.1.z)
+        
+        // 3. Calculate rotation to align normals
+        let rotationAxis = cross(primaryNormal, anchorNormal)
+        let rotationAngle = acos(dot(primaryNormal, anchorNormal))
+        
+        if !rotationAxis.x.isNaN && !rotationAxis.y.isNaN && !rotationAxis.z.isNaN && !rotationAngle.isNaN {
+            let alignmentRotation = simd_quatf(angle: rotationAngle, axis: normalize(rotationAxis))
+            
+            // Apply the rotation
+            modelEntity.orientation = alignmentRotation
+            
+            // Update the model manipulator to track this change
+            modelManipulator.setCurrentRotation(alignmentRotation)
+            modelManipulator.saveCurrentTransform()  // Save this as the new baseline transform
+        }
+    }
+    
+    func toggleRotationX() {
+        // Turn off other rotation modes
+        isRotatingY = false
+        isRotatingZ = false
+        
+        // Toggle X rotation
+        isRotatingX.toggle()
+        
+        if isRotatingX {
+            modelManipulator.startManipulation(.rotatingX)
+        } else {
+            modelManipulator.endManipulation()
+        }
+        
+        // Force UI update
+        objectWillChange.send()
+    }
+    
+    func toggleRotationY() {
+        // Turn off other rotation modes
+        isRotatingX = false
+        isRotatingZ = false
+        
+        // Toggle Y rotation
+        isRotatingY.toggle()
+        
+        if isRotatingY {
+            modelManipulator.startManipulation(.rotatingY)
+        } else {
+            modelManipulator.endManipulation()
+        }
+        
+        // Force UI update
+        objectWillChange.send()
+    }
+    
+    func toggleRotationZ() {
+        // Turn off other rotation modes
+        isRotatingX = false
+        isRotatingY = false
+        
+        // Toggle Z rotation
+        isRotatingZ.toggle()
+        
+        if isRotatingZ {
+            modelManipulator.startManipulation(.rotatingZ)
+        } else {
+            modelManipulator.endManipulation()
+        }
+        
+        // Force UI update
+        objectWillChange.send()
     }
     
 }

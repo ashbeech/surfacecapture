@@ -150,7 +150,77 @@ struct ARSceneView: View {
             // Model Controls when selected
             if arController.isModelSelected {
                 HStack {
+                    VStack(spacing: 15) {
+                        // Auto-align button
+                        Button(action: {
+                            arController.autoAlignModelWithSurface()
+                        }) {
+                            Image(systemName: "square.stack.3d.up.fill")
+                                .font(.system(size: 20))
+                                .foregroundColor(.white)
+                                .frame(width: 40, height: 40)
+                                .background(Color.black.opacity(0.5))
+                                .clipShape(Circle())
+                        }
+                        
+                        // X-axis rotation toggle
+                        Button(action: {
+                            arController.toggleRotationX()
+                        }) {
+                            Image(systemName: "rotate.3d.fill")
+                                .font(.system(size: 20))
+                                .foregroundColor(arController.isRotatingX ? .yellow : .white)
+                                .frame(width: 40, height: 40)
+                                .background(Color.black.opacity(0.5))
+                                .clipShape(Circle())
+                                .overlay(
+                                    Text("X")
+                                        .font(.caption2)
+                                        .foregroundColor(.white)
+                                        .offset(x: 12, y: 12)
+                                )
+                        }
+                        
+                        // Y-axis rotation toggle
+                        Button(action: {
+                            arController.toggleRotationY()
+                        }) {
+                            Image(systemName: "rotate.3d.fill")
+                                .font(.system(size: 20))
+                                .foregroundColor(arController.isRotatingY ? .yellow : .white)
+                                .frame(width: 40, height: 40)
+                                .background(Color.black.opacity(0.5))
+                                .clipShape(Circle())
+                                .overlay(
+                                    Text("Y")
+                                        .font(.caption2)
+                                        .foregroundColor(.white)
+                                        .offset(x: 12, y: 12)
+                                )
+                        }
+                        
+                        // Z-axis rotation toggle
+                        Button(action: {
+                            arController.toggleRotationZ()
+                        }) {
+                            Image(systemName: "rotate.3d.fill")
+                                .font(.system(size: 20))
+                                .foregroundColor(arController.isRotatingZ ? .yellow : .white)
+                                .frame(width: 40, height: 40)
+                                .background(Color.black.opacity(0.5))
+                                .clipShape(Circle())
+                                .overlay(
+                                    Text("Z")
+                                        .font(.caption2)
+                                        .foregroundColor(.white)
+                                        .offset(x: 12, y: 12)
+                                )
+                        }
+                    }
+                    .padding(.leading, 20)
+                    
                     Spacer()
+                    
                     // Model manipulation controls (vertically centered)
                     VStack(spacing: 15) {
                         // Close button
@@ -214,42 +284,6 @@ struct ARSceneView: View {
                         
                         // Rotation Controls Group
                         VStack(spacing: 12) {
-                            // X-axis rotation
-                            Button(action: {
-                                arController.modelManipulator.startManipulation(.rotatingX)
-                            }) {
-                                Image(systemName: "arrow.up.and.down.circle")
-                                    .font(.system(size: 20))
-                                    .foregroundColor(.white)
-                                    .frame(width: 40, height: 40)
-                            }
-                            .background(arController.currentManipulationState == .rotatingX ? Color.green.opacity(0.7) : Color.black.opacity(0.7))
-                            .clipShape(Circle())
-                            
-                            // Y-axis rotation
-                            Button(action: {
-                                arController.modelManipulator.startManipulation(.rotatingY)
-                            }) {
-                                Image(systemName: "arrow.left.and.right.circle")
-                                    .font(.system(size: 20))
-                                    .foregroundColor(.white)
-                                    .frame(width: 40, height: 40)
-                            }
-                            .background(arController.currentManipulationState == .rotatingY ? Color.green.opacity(0.7) : Color.black.opacity(0.7))
-                            .clipShape(Circle())
-                            
-                            // Z-axis rotation
-                            Button(action: {
-                                arController.modelManipulator.startManipulation(.rotatingZ)
-                            }) {
-                                Image(systemName: "arrow.clockwise.circle")
-                                    .font(.system(size: 20))
-                                    .foregroundColor(.white)
-                                    .frame(width: 40, height: 40)
-                            }
-                            .background(arController.currentManipulationState == .rotatingZ ? Color.green.opacity(0.7) : Color.black.opacity(0.7))
-                            .clipShape(Circle())
-                            
                             // Z-depth adjustment
                             Button(action: {
                                 arController.modelManipulator.startManipulation(.adjustingDepth)
@@ -263,7 +297,6 @@ struct ARSceneView: View {
                             .clipShape(Circle())
                         }
                     }
-                    .padding(.vertical, 20)
                     .padding(.trailing, 20)
                     .transition(.move(edge: .trailing))
                     .animation(.easeInOut, value: arController.isModelSelected)

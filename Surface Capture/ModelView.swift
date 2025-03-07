@@ -7,7 +7,7 @@ import SwiftUI
 import QuickLook
 import ARKit
 import os
-
+// In ModelView.swift
 struct ModelView: View {
     static let logger = Logger(subsystem: "com.example.SurfaceCapture", category: "ModelView")
     
@@ -19,6 +19,7 @@ struct ModelView: View {
     @State private var errorMessage = ""
     @State private var showARView = false
     @StateObject private var arController = ARPlaneCaptureViewController(mode: .objectCapture)
+    @EnvironmentObject var appModel: AppDataModel // Add this to access app model
 
     var body: some View {
         ZStack {
@@ -28,9 +29,58 @@ struct ModelView: View {
                     // No-op dismiss callback - using presentation mode instead
                 }
                 
-                // Add CTA Button at the bottom
+                // Add Title and Back Button at the top
                 VStack {
+                    // Title and Back button with safe area handling
+                    HStack {
+                        // Back Button
+                        Button(action: {
+                            // Reset everything and go back to capture state
+                            arController.clearARScene()
+                            
+                            // This is critical - we need to reset the image plane mode flags
+                            appModel.isImagePlacementMode = false
+                            appModel.selectedImage = nil
+                            appModel.selectedModelEntity = nil
+                            appModel.captureType = .objectCapture // Reset to object capture mode
+                            
+                            // Then reset the state to restart like we do in object capture mode
+                            appModel.state = .restart
+                            
+                            dismiss()
+                        }) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundColor(.white)
+                                .frame(width: 40, height: 40)
+                        }
+                        .background(Color.black.opacity(0.7))
+                        .clipShape(Circle())
+                        .padding(.leading, 20)
+                        
+                        Spacer()
+                        
+                        // Title
+                        Text("Scan Preview")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(Color.black.opacity(0.7))
+                            .cornerRadius(10)
+                        
+                        Spacer()
+                        
+                        // Empty view for balance
+                        Color.clear
+                            .frame(width: 40, height: 40)
+                            .padding(.trailing, 20)
+                    }
+                    .padding(.top, 60) // To clear status bar
+                    
                     Spacer()
+                    
+                    // Keep existing bottom CTA Button
                     Button(action: {
                         showARView = true
                     }) {
@@ -46,7 +96,9 @@ struct ModelView: View {
                     }
                     .padding(.bottom, 40)
                 }
+                .edgesIgnoringSafeArea(.top)
             } else {
+                // Keep existing error view
                 VStack(spacing: 20) {
                     Text("Error Loading Model")
                         .font(.headline)
@@ -83,19 +135,12 @@ struct ModelView: View {
                 .environmentObject(AppDataModel.instance)
                 .edgesIgnoringSafeArea(.all)
         }
-        .navigationBarItems(leading:
-            Button(action: { dismiss() }) {
-                HStack {
-                    Image(systemName: "chevron.left")
-                    Text("Back")
-                }
-            }
-        )
         .onAppear {
             verifyAndShowModel()
         }
     }
     
+    // Keep existing methods
     private func dismiss() {
         if let onDismiss = onDismiss {
             onDismiss()
@@ -105,6 +150,7 @@ struct ModelView: View {
     }
     
     private func verifyAndShowModel() {
+        // Keep existing implementation
         showError = false
         
         if !FileManager.default.fileExists(atPath: modelFile.path) {

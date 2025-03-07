@@ -158,6 +158,74 @@ class CaptureFolderManager: ObservableObject {
             .appendingPathComponent(imageIdString(for: id))
             .appendingPathExtension(heicImageExtension)
     }
+    
+    // Add this static method to CaptureFolderManager:
+
+    static func create() throws -> CaptureFolderManager {
+        // Create the top-level Scans directory with timestamp
+        guard let documentsFolder = FileManager.default.urls(for: .documentDirectory,
+                                                          in: .userDomainMask).first else {
+            logger.error("Cannot access documents directory")
+            throw AppError.fileSystemError("Cannot access documents directory")
+        }
+        
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let scansBaseFolder = documentsFolder.appendingPathComponent("Scans", isDirectory: true)
+        let rootScanFolder = scansBaseFolder.appendingPathComponent(timestamp, isDirectory: true)
+        
+        logger.debug("Creating root scan folder at: \(rootScanFolder.path)")
+        
+        // Define subdirectories
+        let imagesFolder = rootScanFolder.appendingPathComponent("Images", isDirectory: true)
+        let snapshotsFolder = rootScanFolder.appendingPathComponent("Snapshots", isDirectory: true)
+        let modelsFolder = rootScanFolder.appendingPathComponent("Models", isDirectory: true)
+        
+        // Create all directories with proper error handling
+        do {
+            try FileManager.default.createDirectory(at: rootScanFolder,
+                                                 withIntermediateDirectories: true)
+            
+            try FileManager.default.createDirectory(at: imagesFolder,
+                                                 withIntermediateDirectories: true)
+            
+            try FileManager.default.createDirectory(at: snapshotsFolder,
+                                                 withIntermediateDirectories: true)
+            
+            try FileManager.default.createDirectory(at: modelsFolder,
+                                                 withIntermediateDirectories: true)
+        } catch {
+            logger.error("Failed to create capture directories: \(error.localizedDescription)")
+            throw AppError.fileSystemError("Failed to create capture directories: \(error.localizedDescription)")
+        }
+        
+        // Verify directories were created successfully
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: rootScanFolder.path, isDirectory: &isDir) && isDir.boolValue,
+              FileManager.default.fileExists(atPath: imagesFolder.path, isDirectory: &isDir) && isDir.boolValue,
+              FileManager.default.fileExists(atPath: snapshotsFolder.path, isDirectory: &isDir) && isDir.boolValue,
+              FileManager.default.fileExists(atPath: modelsFolder.path, isDirectory: &isDir) && isDir.boolValue else {
+            logger.error("Directory verification failed")
+            throw AppError.fileSystemError("Directory verification failed")
+        }
+        
+        // Create and return the folder manager
+        let folderManager = CaptureFolderManager(rootFolder: rootScanFolder,
+                                               imagesFolder: imagesFolder,
+                                               snapshotsFolder: snapshotsFolder,
+                                               modelsFolder: modelsFolder)
+        
+        logger.log("Successfully created capture folder structure")
+        return folderManager
+    }
+
+    // Also add a memberwise initializer to allow direct initialization with folder URLs
+    init(rootFolder: URL, imagesFolder: URL, snapshotsFolder: URL, modelsFolder: URL) {
+        self.rootScanFolder = rootFolder
+        self.imagesFolder = imagesFolder
+        self.snapshotsFolder = snapshotsFolder
+        self.modelsFolder = modelsFolder
+        self.shots = []
+    }
 }
 
 /// A struct to represent shot file information

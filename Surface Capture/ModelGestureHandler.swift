@@ -2,7 +2,7 @@
 //  ModelGestureHandler.swift
 //  Surface Capture App
 //
-
+/*
 import SwiftUI
 import RealityKit
 import ARKit
@@ -79,13 +79,34 @@ class ModelGestureHandler: NSObject, UIGestureRecognizerDelegate {
     }
     
     @objc func handlePan(_ sender: UIPanGestureRecognizer) {
-        guard let entity = modelEntity, !isPositionLocked else { return }
+        guard let entity = modelEntity, !isPositionLocked, let arView = sender.view as? ARView else { return }
         
-        let translation = sender.translation(in: sender.view)
-        let delta = SIMD3<Float>(Float(translation.x / 1000.0), 0, Float(translation.y / 1000.0))
+        let translation = sender.translation(in: arView)
+        
+        // Get the camera's position and orientation
+        guard let camera = arView.session.currentFrame?.camera else {
+            sender.setTranslation(.zero, in: arView)
+            return
+        }
+        
+        // Calculate the right and up vectors in world space based on camera orientation
+        let cameraTransform = camera.transform
+        
+        // Extract the right and up vectors from the camera transform matrix
+        let cameraRight = SIMD3<Float>(cameraTransform.columns.0.x, cameraTransform.columns.0.y, cameraTransform.columns.0.z)
+        let cameraUp = SIMD3<Float>(cameraTransform.columns.1.x, cameraTransform.columns.1.y, cameraTransform.columns.1.z)
+        
+        // Create movement delta based on camera orientation
+        let deltaRight = cameraRight * Float(translation.x / 1000.0)
+        let deltaUp = cameraUp * Float(-translation.y / 1000.0) // Negative because screen Y is inverted
+        
+        // Apply the combined delta
+        let delta = deltaRight + deltaUp
         entity.transform.translation += delta
-        lastPanLocation = sender.location(in: sender.view)
-        sender.setTranslation(.zero, in: sender.view)
+        
+        // Reset the translation for continuous updates
+        lastPanLocation = sender.location(in: arView)
+        sender.setTranslation(.zero, in: arView)
     }
     
     func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
@@ -93,3 +114,4 @@ class ModelGestureHandler: NSObject, UIGestureRecognizerDelegate {
         return true
     }
 }
+*/

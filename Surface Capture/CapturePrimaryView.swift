@@ -78,14 +78,24 @@ actor EnhancedTrackingMonitorState {
     }
     
     func getStatus() -> TrackingQualityStatus {
-        if metrics.hasResourceConstraints || !metrics.isDepthAvailable {
+        // Debug output
+        print("Resource Constraints: \(metrics.hasResourceConstraints)")
+        print("Depth Available: \(metrics.isDepthAvailable)")
+        print("Motion Steadiness: \(metrics.motionSteadiness)")
+        print("Depth Quality: \(metrics.depthQuality)")
+        
+        // Only consider truly critical factors for tracking loss
+        if metrics.hasResourceConstraints {
             return .notAvailable
         }
         
-        if metrics.motionSteadiness < 0.4 || metrics.depthQuality < 0.3 {
+        // If motion steadiness is very poor, consider it limited tracking
+        if metrics.motionSteadiness < 0.4 {
             return .limited
         }
         
+        // Even if depth data isn't optimal, consider tracking normal
+        // This is a key change - we don't require depth data for basic tracking
         return .normal
     }
     
@@ -154,7 +164,13 @@ class EnhancedTrackingMonitor: NSObject, @unchecked Sendable {
         case .completed:
             break
             
+        case .capturing:
+            // Ensure resource constraints get reset when in capturing state
+            await self.state.updateMetrics(hasResourceConstraints: false, isDepthAvailable: true)
+            await self.state.updateMotionSteadiness(1.0)
+            
         case .ready, .detecting:
+            // Ensure resource constraints get reset when in ready or detecting state
             await self.state.updateMetrics(hasResourceConstraints: false)
             await self.state.updateMotionSteadiness(1.0)
             
@@ -162,6 +178,8 @@ class EnhancedTrackingMonitor: NSObject, @unchecked Sendable {
             await self.state.updateMotionSteadiness(0.5)
             
         default:
+            // Add a log to check for unexpected states
+            print("Unexpected state: \(state)")
             break
         }
     }
@@ -178,32 +196,161 @@ class EnhancedTrackingMonitor: NSObject, @unchecked Sendable {
     }
 }
 
+@available(iOS 17.0, *)
+struct CaptureProgressIndicator: View {
+    let imageCount: Int
+    let minRequired: Int
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Camera icon with count
+            HStack(spacing: 4) {
+                Image(systemName: "camera.fill")
+                    .font(.system(size: 14))
+                
+                Text("\(imageCount)")
+                    .font(.system(size: 16, weight: .bold))
+                    .monospacedDigit()
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.black.opacity(0.7))
+            .cornerRadius(6)
+            
+            // Progress bar
+            ZStack(alignment: .leading) {
+                // Background
+                Capsule()
+                    .fill(Color.white.opacity(0.3))
+                    .frame(width: 100, height: 8)
+                
+                // Fill
+                Capsule()
+                    .fill(progressColor)
+                    .frame(width: CGFloat(min(imageCount, minRequired)) / CGFloat(minRequired) * 100, height: 8)
+                    .animation(.easeInOut, value: imageCount)
+            }
+            
+            // Indication text based on progress
+            Text(statusText)
+                .font(.caption)
+                .foregroundColor(.white)
+        }
+        .padding(10)
+        .background(Color.black.opacity(0.6))
+        .cornerRadius(10)
+    }
+    
+    private var progressColor: Color {
+        let progress = Double(imageCount) / Double(minRequired)
+        switch progress {
+        case 0..<0.5: return .red
+        case 0.5..<1.0: return .orange
+        default: return .green
+        }
+    }
+    
+    private var statusText: String {
+        if imageCount < minRequired {
+            return "Need \(minRequired - imageCount) more"
+        } else if imageCount < minRequired * 2 {
+            return "Good"
+        } else {
+            return "Excellent"
+        }
+    }
+}
+
+@available(iOS 17.0, *)
 struct CustomCaptureOverlay: View {
     let captureState: ObjectCaptureSession.CaptureState
-    let trackingQuality: TrackingQualityStatus
+    let trackingState: ObjectCaptureSession.Tracking
+    let imageCount: Int
+    let minRequiredImages: Int
     
     var body: some View {
         VStack {
-            // Custom coaching hints
-            if case .detecting = captureState {
-                CoachingHint(
-                    icon: "camera.viewfinder",
-                    message: "Move closer to the surface"
+            // Quality indicator for tracking state
+            if case .limited(let reason) = trackingState {
+                TrackingQualityIndicator(
+                    tracking: trackingState,
+                    reason: reason
                 )
+                .padding(.bottom, 8)
                 .transition(.opacity)
             }
-            
-            // Quality indicator
-            QualityIndicatorView(quality: trackingQuality)
-                .padding(.top)
             
             // Capture progress
             if case .capturing = captureState {
                 CaptureProgressView()
                     .transition(.slide)
+                    .padding(.top, 8)
             }
         }
         .animation(.easeInOut, value: captureState)
+        .animation(.easeInOut, value: imageCount)
+        .animation(.easeInOut, value: trackingState)
+    }
+}
+
+@available(iOS 17.0, *)
+struct TrackingQualityIndicator: View {
+    let tracking: ObjectCaptureSession.Tracking
+    let reason: ObjectCaptureSession.Tracking.Reason?
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            // Status icon
+            Circle()
+                .fill(statusColor)
+                .frame(width: 12, height: 12)
+            
+            // Status message
+            Text(statusMessage)
+                .font(.subheadline)
+                .foregroundColor(.white)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color.black.opacity(0.6))
+        .cornerRadius(15)
+    }
+    
+    private var statusColor: Color {
+        switch tracking {
+        case .normal:
+            return .green
+        case .limited:
+            return .yellow
+        case .notAvailable:
+            return .red
+        @unknown default:
+            return .orange
+        }
+    }
+    
+    private var statusMessage: String {
+        switch tracking {
+        case .normal:
+            return "Good Tracking"
+        case .limited(let reason):
+            switch reason {
+            case .excessiveMotion:
+                return "Move Camera Slower"
+            case .insufficientFeatures:
+                return "Need More Features"
+            case .initializing:
+                return "Initializing Tracking"
+            case .relocalizing:
+                return "Relocalizing"
+            @unknown default:
+                return "Limited Tracking"
+            }
+        case .notAvailable:
+            return "No Tracking Available"
+        @unknown default:
+            return "Check Tracking Status"
+        }
     }
 }
 
@@ -222,41 +369,6 @@ struct CoachingHint: View {
         .padding()
         .background(Color.black.opacity(0.7))
         .cornerRadius(10)
-    }
-}
-
-struct QualityIndicatorView: View {
-    let quality: TrackingQualityStatus
-    
-    var body: some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(qualityColor)
-                .frame(width: 12, height: 12)
-            
-            Text(qualityMessage)
-                .font(.subheadline)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(Color.black.opacity(0.5))
-        .cornerRadius(15)
-    }
-    
-    private var qualityColor: Color {
-        switch quality {
-        case .normal: return .green
-        case .limited: return .yellow
-        case .notAvailable: return .red
-        }
-    }
-    
-    private var qualityMessage: String {
-        switch quality {
-        case .normal: return "Good Tracking"
-        case .limited: return "Move Slower"
-        case .notAvailable: return "Lost Tracking"
-        }
     }
 }
 
@@ -316,59 +428,149 @@ struct CapturePrimaryView: View {
     @EnvironmentObject var appModel: AppDataModel
     var session: ObjectCaptureSession
     
+    // Session state
     @State private var showInfo: Bool = false
     @State private var isCapturing = false
     @State private var isCameraReady = false
     @State private var isInitializing = true
     @State private var initializationError: Error?
-    @State private var trackingQuality: TrackingQualityStatus = .normal
-    @State private var showTrackingWarning = false
-    @State private var showPerformanceWarning = false
     @State private var isSessionReady = false
     
-    // Add state for image picker
-    @State private var isImagePickerPresented: Bool = false
+    // Tracking state
+    @State private var sessionTracking: ObjectCaptureSession.Tracking = .normal
+    @State private var showTrackingWarning = false
+    @State private var trackingMonitorTask: Task<Void, Never>?
     
+    // Image picker state
+    @State private var isImagePickerPresented: Bool = false
+    @State private var isInImagePickerFlow: Bool = false
+
+    // Image count tracking
+    @State private var capturedImageCount: Int = 0
+    @State private var imageCountTimer: Timer?
+    
+    // Legacy tracking monitor - kept for backward compatibility
     private let trackingMonitor = EnhancedTrackingMonitor()
+    
+    @State private var isTransitioning = false
+    
+    // First, let's add a computed property to determine the appropriate loading message
+    private var loadingMessage: (title: String, description: String) {
+        if isImagePickerPresented {
+            return ("Pulling up photo library", "Opening image selector...")
+        } else if isInImagePickerFlow && !isTransitioning {
+            return ("Returning to camera", "Please wait...")
+        } else if isInitializing {
+            return ("Preparing AR camera", "Setting up tracking...")
+        } else if isTransitioning {
+            return ("Processing", "Preparing selected image...")
+        } else {
+            return ("Preparing...", "Please wait a moment")
+        }
+    }
+    
+    private func cleanupAndResetState() {
+        // Stop all ongoing processes
+        stopImageCountTimer()
+        trackingMonitorTask?.cancel()
+        trackingMonitorTask = nil
+        
+        // Stop the session if it's running
+        if isCapturing {
+            session.cancel()  // Cancel instead of finish to abort the capture
+        }
+        
+        // Reset view state variables
+        isCapturing = false
+        capturedImageCount = 0
+        showTrackingWarning = false
+        
+        // Reset tracking and quality metrics
+        sessionTracking = .normal
+        
+        // Restart camera and session preparation
+        isSessionReady = true
+        isCameraReady = true
+        isInitializing = false
+        
+        // Remove any temporary files if needed
+        if let folderManager = appModel.scanFolderManager {
+            do {
+                // Only delete image files, keep the folder structure
+                let imageFiles = try FileManager.default.contentsOfDirectory(
+                    at: folderManager.imagesFolder,
+                    includingPropertiesForKeys: nil
+                )
+                
+                for file in imageFiles {
+                    try FileManager.default.removeItem(at: file)
+                }
+            } catch {
+                print("Error cleaning up temporary files: \(error)")
+            }
+        }
+        
+        // Force UI update
+        withAnimation {
+            appModel.state = .ready
+        }
+    }
     
     var body: some View {
         ZStack {
-            if isSessionReady {
-                // Only show ObjectCaptureView once the session is confirmed ready
+            if isSessionReady && !isTransitioning && !isImagePickerPresented && !isInImagePickerFlow {
                 ObjectCaptureView(session: session)
                     .hideObjectReticle(true)
-                    .overlay(alignment: .bottom) {
-                        controlsOverlay
-                    }
-                    .overlay(alignment: .top) {
+                    .overlay(alignment: .topLeading) {
+                        // Back button with circular styling
                         if isCapturing {
-                            CustomCaptureOverlay(
-                                captureState: session.state,
-                                trackingQuality: trackingQuality
-                            )
-                            .padding(.top, 44)
+                            Button(action: {
+                                cleanupAndResetState()
+                            }) {
+                                Image(systemName: "chevron.left")
+                                    .font(.system(size: 20, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .frame(width: 40, height: 40)
+                            }
+                            .background(Color.black.opacity(0.7))
+                            .clipShape(Circle())
+                            .padding(.leading, 20)
+                            .transition(.opacity)
+                            .animation(.easeInOut, value: isCapturing)
                         }
                     }
+                    .overlay(alignment: .bottom) {
+                        // Bottom controls with fixed position
+                        enhancedControlsOverlay
+                    }
+                /*
                     .overlay(alignment: .center) {
                         if isInitializing {
                             InitializationView(error: initializationError)
-                        } else if showPerformanceWarning {
-                            WarningBanner(message: "Performance issues detected - try moving slower")
                         }
                     }
+                 */
             } else {
                 // Show loading view while session initializes
                 VStack {
-                    ProgressView("Preparing camera...")
-                    Text("Please wait while AR tracking initializes")
+                    ProgressView(loadingMessage.title)
+                    Text(loadingMessage.description)
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .padding()
                 }
             }
+            
+            // Add the transition overlay on top of everything when transitioning
+            if isTransitioning {
+                TransitionOverlay()
+                    .animation(.easeInOut, value: isTransitioning)
+            }
         }
         .onAppear {
             validateAndSetupSession()
+            startImageCountTimer()
+            setupTrackingUpdates()
         }
         .onDisappear {
             cleanupSession()
@@ -376,88 +578,417 @@ struct CapturePrimaryView: View {
         .alert("Tracking Warning", isPresented: $showTrackingWarning) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("Try moving the camera more slowly and ensure good lighting")
+            Text(trackingWarningMessage)
         }
-        .sheet(isPresented: $isImagePickerPresented) {
+        .sheet(isPresented: $isImagePickerPresented, onDismiss: {
+            // Don't immediately reset isInImagePickerFlow when dismissed
+            if appModel.selectedImage != nil {
+                isTransitioning = true
+                // Keep isInImagePickerFlow true to prevent ObjectCaptureView from showing
+                appModel.handleSelectedImage(appModel.selectedImage)
+            } else {
+                // Only reset the flow if no image was selected
+                isInImagePickerFlow = false
+            }
+        }) {
             ImagePicker(selectedImage: $appModel.selectedImage)
-                .onDisappear {
-                    if appModel.selectedImage != nil {
-                        // Use the centralized handling
-                        appModel.handleSelectedImage(appModel.selectedImage)
-                    }
-                }
         }
     }
     
-    // MARK: - View Components
+    // MARK: - Enhanced Controls Overlay
     
-    private var controlsOverlay: some View {
-        VStack(spacing: 20) {
-            if session.state == .capturing {
-                Button(action: {
-                    withAnimation {
-                        session.finish()
-                    }
-                }) {
-                    Text("Finish Capture")
+    // This computes whether enough images have been captured for a good model
+    private var hasEnoughCaptures: Bool {
+        return capturedImageCount >= AppDataModel.minNumImages
+    }
+    
+    // Calculate capture quality based on current session data using official session tracking
+    private var captureQuality: CaptureQuality {
+        // First check if we have enough captures - this is the primary requirement
+        
+        if !hasEnoughCaptures {
+            return .insufficient
+        }
+        
+        // We have enough images, so check tracking quality
+        switch sessionTracking {
+        case .normal:
+            return .ready
+        case .limited:
+            // Still allow completion with limited tracking, but show warning
+            return .ready
+        case .notAvailable:
+            // Only block completion if tracking is completely unavailable
+            return .noTracking
+        @unknown default:
+            // For future unknown tracking states, assume limited tracking
+            return .limitedTracking
+        }
+    }
+    
+    private var trackingWarningMessage: String {
+        if case .limited(let reason) = sessionTracking {
+            switch reason {
+            case .excessiveMotion:
+                return "Camera is moving too quickly. Please move more slowly to improve tracking."
+            case .insufficientFeatures:
+                return "Not enough visual features detected. Try moving to an area with more visual details."
+            case .initializing:
+                return "Tracking system is still initializing. Please wait a moment."
+            case .relocalizing:
+                return "Relocalizing"
+            @unknown default:
+                return "Tracking quality is limited. Try adjusting your environment."
+            }
+        } else if case .notAvailable = sessionTracking {
+            return "Tracking is not available. Try moving to a well-lit area with more visual features."
+        } else {
+            return "Try moving the camera more slowly and ensure good lighting."
+        }
+    }
+    
+    private struct TransitionOverlay: View {
+        var body: some View {
+            ZStack {
+                // Dark semi-transparent background to cover the old UI
+                Color.black.opacity(0.7)
+                    .edgesIgnoringSafeArea(.all)
+                
+                // Loading indicator
+                VStack(spacing: 20) {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(1.5)
+                    
+                    Text("Processing...")
                         .font(.headline)
                         .foregroundColor(.white)
-                        .padding()
-                        .background(Capsule().fill(Color.blue))
                 }
-            } else {
-                HStack {
-                    // Add Image Picker Button
-                    Button(action: {
-                        isImagePickerPresented = true
-                    }) {
-                        HStack {
-                            Image(systemName: "photo.fill")
-                            Text("Image")
+                .padding(30)
+                .background(Color.black.opacity(0.6))
+                .cornerRadius(15)
+            }
+            .transition(.opacity)
+        }
+    }
+    
+    struct CaptureProgressButton: View {
+        // Image capturing progress
+        let imageCount: Int
+        let minRequired: Int
+        
+        // Button state
+        let isEnabled: Bool
+        let isCapturingMode: Bool // This tracks if the session is in capturing mode
+        let action: () -> Void
+        
+        var body: some View {
+            GeometryReader { geometry in
+                Button(action: {
+                    // Execute action if either:
+                    // 1. Not in capturing mode yet (initial state)
+                    // 2. Has enough captures (completion state)
+                    if !isCapturingMode || hasEnoughCaptures {
+                        action()
+                    }
+                }) {
+                    ZStack(alignment: .leading) {
+                        // Button background - solid color even when disabled
+                        Capsule()
+                            .fill(buttonColor)
+                            .frame(width: geometry.size.width)
+                        
+                        // Progress overlay (only shown during capture with images)
+                        if isCapturingMode && !hasEnoughCaptures && imageCount > 0 {
+                            Capsule()
+                                .fill(progressColor)
+                                .frame(width: progressWidth(totalWidth: geometry.size.width))
                         }
-                        .foregroundColor(.white)
-                        .padding()
-                        .background(Capsule().fill(Color.green))
+                        
+                        // Button content - centered in the button
+                        HStack {
+                            Spacer()
+                            // Icon changes based on state
+                            if hasEnoughCaptures {
+                                // Enough images captured
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 18))
+                                    .foregroundColor(.white)
+                            }else{
+                                // Initial state
+                                Image(systemName: "camera.fill")
+                                    .font(.system(size: 18))
+                                    .foregroundColor(.white)
+                            }
+                            
+                            // Text changes based on state
+                            if !isCapturingMode {
+                                // Initial state
+                                Text("Scan Surface")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                            } else if hasEnoughCaptures {
+                                // Enough images captured
+                                Text("Finish Scan")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                            } else if imageCount == 0 {
+                                // After tap but before first image
+                                Text("Scanning...")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                            } else {
+                                // Once images start being captured
+                                Text("\(imageCount)/\(minRequired)")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                            }
+                            Spacer()
+                        }
+                        .padding(.vertical, 12)
                     }
-                    .padding(.horizontal, 4)
+                }
+                .buttonStyle(PlainButtonStyle()) // Use PlainButtonStyle to avoid default button styling
+                .allowsHitTesting((isCapturingMode && hasEnoughCaptures) || (!isCapturingMode && isEnabled))
+                .opacity(1.0)
+                // Add pulsing effect when ready
+                .scaleEffect(hasEnoughCaptures ? 1.0 + (0.03 * sin(Date.timeIntervalSinceReferenceDate * 3)) : 1.0)
+                .animation(.easeInOut(duration: 0.3), value: hasEnoughCaptures)
+            }
+            .frame(height: 54)
+        }
+        
+        // Computed properties
+        private var hasEnoughCaptures: Bool {
+            return imageCount >= minRequired
+        }
+        
+        private var progress: Double {
+            return Double(min(imageCount, minRequired)) / Double(minRequired)
+        }
+        
+        // Progress bar color based on completion level
+        private var progressColor: Color {
+            switch progress {
+            case 0..<0.3: return .red
+            case 0.3..<0.7: return .orange
+            default: return .yellow
+            }
+        }
+        
+        // Button background color based on state - now always solid
+        private var buttonColor: Color {
+            if hasEnoughCaptures {
+                return .green
+            } else if isEnabled {
+                return isCapturingMode ? Color.blue : .blue
+            } else {
+                return .gray
+            }
+        }
+        
+        // Calculate progress bar width based on actual button width
+        private func progressWidth(totalWidth: CGFloat) -> CGFloat {
+            return CGFloat(progress) * totalWidth
+        }
+    }
+    
+    // A new enum to represent the quality status for UI purposes
+    enum CaptureQuality {
+        case insufficient      // Not enough images
+        case limitedTracking   // Enough images but tracking issues
+        case noTracking        // Enough images but severe tracking issues
+        case ready             // Enough images and good tracking
+        
+        var buttonColor: Color {
+            switch self {
+            case .insufficient: return Color.gray
+            case .limitedTracking: return Color.orange
+            case .noTracking: return Color.red
+            case .ready: return Color.blue
+            }
+        }
+        
+        var buttonText: String {
+            switch self {
+            case .insufficient: return "Capture More"
+            case .limitedTracking: return "Improve Tracking"
+            case .noTracking: return "Tracking Lost"
+            case .ready: return "Finish Capture"
+            }
+        }
+        
+        var isEnabled: Bool {
+            return self == .ready
+        }
+        
+        var helpText: String? {
+            switch self {
+            case .insufficient:
+                return "Move to capture more images"
+            case .limitedTracking:
+                return "Move slower for better tracking"
+            case .noTracking:
+                return "Tracking lost - move camera to recover"
+            case .ready:
+                return nil
+            }
+        }
+    }
+    
+    // Enhanced controls overlay with dynamic appearance
+    var enhancedControlsOverlay: some View {
+        VStack(spacing: 20) {
+            ZStack {
+                // Initial state with Image button
+                if !isCapturing {
+                    HStack {
+                        // Image Picker Button
+                        Button(action: {
+                            appModel.selectedImage = nil
+                            isInImagePickerFlow = true
+                            isImagePickerPresented = true
+                        }) {
+                            HStack {
+                                Image(systemName: "photo.fill")
+                                Text("Add Image")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                            }
+                            .foregroundColor(.white)
+                            .padding()
+                            .background(Capsule().fill(Color.green))
+                        }
+                        .padding(.horizontal, 4)
+                        
+                        // Initial state capture button
+                        CaptureProgressButton(
+                            imageCount: 0,
+                            minRequired: AppDataModel.minNumImages,
+                            isEnabled: isCameraReady && !isInitializing,
+                            isCapturingMode: false,
+                            action: {
+                                withAnimation(.easeInOut(duration: 0.5)) {
+                                    startCapture()
+                                }
+                            }
+                        )
+                        .frame(width: 180)
+                    }
+                    .transition(.opacity)
+                }
+                
+                // Capturing state - button only, no help text
+                if isCapturing && !isTransitioning {
+                    CaptureProgressButton(
+                        imageCount: capturedImageCount,
+                        minRequired: AppDataModel.minNumImages,
+                        isEnabled: captureQuality.isEnabled,
+                        isCapturingMode: true,
+                        action: {
+                            withAnimation {
+                                if captureQuality.isEnabled {
+                                    isTransitioning = true
+                                    let generator = UINotificationFeedbackGenerator()
+                                    generator.notificationOccurred(.success)
+                                    session.finish()
+                                } else {
+                                    let generator = UINotificationFeedbackGenerator()
+                                    generator.notificationOccurred(.warning)
+                                    
+                                    if captureQuality == .noTracking || captureQuality == .limitedTracking {
+                                        showTrackingWarning = true
+                                    }
+                                }
+                            }
+                        }
+                    )
+                    .frame(width: 220)
+                    .transition(.opacity)
+                }
+            }
+            .animation(.easeInOut(duration: 0.5), value: isCapturing)
+        }
+        .padding(.bottom, 33)
+    }
+    
+    // MARK: - Setup Tracking Updates
+    
+    private func setupTrackingUpdates() {
+        // Cancel any existing task
+        trackingMonitorTask?.cancel()
+        
+        // Create new task to monitor official tracking updates
+        trackingMonitorTask = Task {
+            for await trackingState in session.cameraTrackingUpdates {
+                await MainActor.run {
+                    print("Camera tracking updated to: \(trackingState)")
+                    self.sessionTracking = trackingState
                     
-                    Button("Start Capture") {
-                        startCapture()
+                    // Show warning if tracking is lost
+                    if case .notAvailable = trackingState {
+                        self.showTrackingWarning = true
                     }
-                    .foregroundColor(.white)
-                    .padding()
-                    .background(Capsule().fill((isCameraReady && !isInitializing) ? Color.blue : Color.gray.opacity(0.6)))
-                    .opacity((isCameraReady && !isInitializing) ? 1.0 : 0.7)
-                    .disabled(!(isCameraReady && !isInitializing))
                 }
             }
         }
-        .padding(.bottom, 40)
+    }
+    
+    // MARK: - Image Count Tracking
+    
+    private func updateCapturedImageCount() {
+        guard let folderManager = appModel.scanFolderManager else { return }
+        
+        Task {
+            do {
+                let images = try FileManager.default.contentsOfDirectory(
+                    at: folderManager.imagesFolder,
+                    includingPropertiesForKeys: nil
+                ).filter {
+                    $0.pathExtension.lowercased() == "heic" ||
+                    $0.pathExtension.lowercased() == "jpg" ||
+                    $0.pathExtension.lowercased() == "jpeg"
+                }
+                
+                await MainActor.run {
+                    capturedImageCount = images.count
+                }
+            } catch {
+                print("Error counting images: \(error)")
+            }
+        }
+    }
+    
+    private func startImageCountTimer() {
+        stopImageCountTimer()
+        
+        imageCountTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { timer in
+            guard self.isCapturing else {
+                timer.invalidate()
+                return
+            }
+            self.updateCapturedImageCount()
+        }
+        
+        updateCapturedImageCount()
+    }
+    
+    private func stopImageCountTimer() {
+        imageCountTimer?.invalidate()
+        imageCountTimer = nil
     }
     
     // MARK: - Helper Methods
-    
     private func validateAndSetupSession() {
-        // Ensure the session is properly initialized before showing the view
         isSessionReady = false
         isCameraReady = false
         isInitializing = true
         
-        // Make sure the session has been started and is in a valid state
-        // Commenting out this block properly with a single-line comment style
-        // if session.state == .failed {
-        //     print("Session already in failed state on appearance")
-        //     initializationError = CameraError.initializationTimeout
-        //     return
-        // }
-        
-        // Start with a task to monitor the session state
         Task {
             // Add a timeout to prevent indefinite waiting
             let timeout = Task {
                 try await Task.sleep(for: .seconds(1.8))
                 await MainActor.run {
-                    // Force readiness if timeout occurs to avoid blocking the user
                     if !isSessionReady {
                         print("Session readiness timeout - forcing readiness")
                         isSessionReady = true
@@ -467,60 +998,38 @@ struct CapturePrimaryView: View {
                 }
             }
             
-            // Monitor session state changes to detect when it's ready
-            do {
-                // Make the await call itself throw with 'try' before it
-                let stateUpdates = try session.stateUpdates
-                
-                for await state in stateUpdates {
-                    await MainActor.run {
-                        print("Session state updated to: \(state)")
+            // Monitor session state changes
+            let stateUpdates = session.stateUpdates
+            
+            for await state in stateUpdates {
+                await MainActor.run {
+                    print("Session state updated to: \(state)")
+                    
+                    switch state {
+                    case .ready, .detecting, .capturing:
+                        isSessionReady = true
+                        isCameraReady = true
+                        isInitializing = false
+                        timeout.cancel()
                         
-                        // Use a switch statement for proper pattern matching with multiple cases
-                        switch state {
-                        case .ready, .detecting, .capturing:
-                            // These are the states we consider "ready"
-                            isSessionReady = true
-                            isCameraReady = true
-                            isInitializing = false
-                            timeout.cancel() // Cancel the timeout once ready
-                            
-                        case .failed(let error):
-                            print("Session failed: \(error)")
-                            initializationError = error
-                            isSessionReady = true // Show the view with error
-                            isInitializing = false
-                            timeout.cancel()
-                            
-                        default:
-                            // For other states like initializing, we don't change the ready state
-                            break
-                        }
+                    case .failed(let error):
+                        print("Session failed: \(error)")
+                        initializationError = error
+                        isSessionReady = true
+                        isInitializing = false
+                        timeout.cancel()
+                        
+                    default:
+                        break
                     }
                 }
-            } catch {
-                await MainActor.run {
-                    print("Error monitoring session state: \(error)")
-                    isSessionReady = true
-                    isInitializing = false
-                    timeout.cancel()
-                }
             }
         }
         
-        // Setup UI applications and tracking monitor
         UIApplication.shared.isIdleTimerDisabled = true
         
-        // Start tracking monitor after confirming the session is valid
-        trackingMonitor.startMonitoring(session: session) { quality, stats in
-            Task { @MainActor in
-                self.trackingQuality = quality
-                print("Tracking Quality: \(quality)")
-                self.showPerformanceWarning = stats.hasResourceConstraints
-            }
-        }
-        
-        // Listen for ARKit session notifications
+        // Use both tracking systems for now (official and custom) for compatibility
+        setupTrackingUpdates()
         setupARKitNotifications()
     }
     
@@ -532,9 +1041,9 @@ struct CapturePrimaryView: View {
             queue: .main) { _ in
                 if !self.isCameraReady {
                     print("AR tracking state changed")
-                    _ = self.checkARTrackingStatus() // Use underscore to explicitly ignore result
+                    _ = self.checkARTrackingStatus()
                 }
-        }
+            }
         
         // Listen for ARKit session activation
         NotificationCenter.default.addObserver(
@@ -544,20 +1053,10 @@ struct CapturePrimaryView: View {
                 print("AR Session became active")
                 self.isCameraReady = true
                 self.isInitializing = false
-        }
-        
-        // Memory warning monitoring
-        NotificationCenter.default.addObserver(
-            forName: UIApplication.didReceiveMemoryWarningNotification,
-            object: nil,
-            queue: .main) { _ in
-                self.showPerformanceWarning = true
-        }
+            }
     }
     
     private func checkARTrackingStatus() -> Bool {
-        // We can't directly access ARView in a SwiftUI view
-        // Instead, make a reasonable assumption based on session state
         if session.state == .ready || session.state == .detecting {
             print("Session appears to be in a ready state")
             self.isCameraReady = true
@@ -567,175 +1066,37 @@ struct CapturePrimaryView: View {
         return false
     }
     
-    private func setupSession() {
-        UIApplication.shared.isIdleTimerDisabled = true
-        
-        // Start with disabled button
-        isCameraReady = false
-        isInitializing = true
-        
-        // Start tracking monitor
-        trackingMonitor.startMonitoring(session: session) { quality, stats in
-            Task { @MainActor in
-                self.trackingQuality = quality
-                print("********** Tracking Quality: \(quality)")
-                self.showPerformanceWarning = stats.hasResourceConstraints
-            }
-        }
-        
-        // 1. APPROACH: Listen for ARKit tracking state changes
-        NotificationCenter.default.addObserver(
-            forName: .ARSessionTrackingStateChanged,
-            object: nil,
-            queue: .main) { _ in
-                _ = self.checkARTrackingStatus() // Using underscore to explicitly ignore result
-                print("Tracking status: \(self.checkARTrackingStatus())")
-        }
-        
-        // 2. APPROACH: Listen for ARKit session running notifications
-        NotificationCenter.default.addObserver(
-            forName: .ARSessionDidBecomeActive,
-            object: nil,
-            queue: .main) { _ in
-                print("AR Session became active")
-                self.isCameraReady = true
-                self.isInitializing = false
-        }
-        
-        // 3. APPROACH: Continue monitoring session state updates directly
-        Task {
-            do {
-                for try await state in session.stateUpdates {
-                    await MainActor.run {
-                        print("ObjectCaptureSession state: \(state)")
-                        // When we see a ready state, enable the capture button
-                        if case .ready = state {
-                            self.isCameraReady = true
-                            self.isInitializing = false
-                        }
-                    }
-                }
-            }
-        }
-        
-        // 4. APPROACH: Memory warning monitoring (as you had before)
-        NotificationCenter.default.addObserver(
-            forName: UIApplication.didReceiveMemoryWarningNotification,
-            object: nil,
-            queue: .main) { _ in
-                //showPerformanceWarning = true
-        }
-        
-        // 5. APPROACH: Fallback timer after a reasonable delay
-        //DispatchQueue.main.asyncAfter(deadline: .now()) {
-            // Using explicit comparison instead of negation to avoid syntax issues
-            if self.isCameraReady == false {
-                print("Fallback timer activating camera readiness")
-                self.isCameraReady = true
-                self.isInitializing = false
-            }
-        //}
-        
-
-    }
-
-    private func checkSessionReady() {
-        // Check immediately, then at increasing intervals
-        let checkIntervals = [0.5, 1.0, 2.0, 3.0, 5.0]
-        
-        for (index, interval) in checkIntervals.enumerated() {
-            DispatchQueue.main.asyncAfter(deadline: .now() + interval) {
-                if session.state == .ready || session.state == .detecting {
-                    isCameraReady = true
-                    isInitializing = false
-                } else if index == checkIntervals.count - 1 {
-                    // Last attempt, session still not ready
-                    if !isCameraReady {
-                        isCameraReady = true  // Just enable it anyway at this point
-                        isInitializing = false
-                    }
-                }
-            }
-        }
-    }
-
-    private func startCameraInitialization() {
-        isInitializing = true
-        
-        /*
-         // Add timeout just in case
-         Task { @MainActor in
-         //try? await Task.sleep(for: .seconds(0))
-         if !isCameraReady {
-         initializationError = CameraError.initializationTimeout
-         }
-         }
-         */
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            isCameraReady = true
-            isInitializing = false
-        }
-        // Make camera ready immediately - this worked in the original code
-        
-    }
-    
     private func cleanupSession() {
         UIApplication.shared.isIdleTimerDisabled = false
         trackingMonitor.stopMonitoring()
+        trackingMonitorTask?.cancel()
+        trackingMonitorTask = nil
+        stopImageCountTimer()
         NotificationCenter.default.removeObserver(self)
     }
     
     private func startCapture() {
-        // First check if camera is ready and there are no performance warnings
-        guard isCameraReady && !showPerformanceWarning else { return }
+        guard isCameraReady else { return }
         
         print("Session state before starting capture: \(session.state)")
         
-        // Additional validation to ensure session is in a valid state for capturing
         guard session.state == .ready || session.state == .detecting else {
-            // Show a user-facing message about the session not being ready
             let message = "Waiting for camera to initialize. Please try again in a moment."
             appModel.messageList.add(message)
             
-            // Schedule removal of the message after a few seconds
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                 appModel.messageList.remove(message)
             }
             return
         }
         
-        // Start the capture session
-        session.startCapturing()
-        isCapturing = true
+        withAnimation(.easeInOut(duration: 0.5)) {
+            isCapturing = true
+        }
         
-        // Reset warning state
-        showPerformanceWarning = false
-    }
-    
-    private var captureStatusMessage: String {
-        if showPerformanceWarning {
-            return "Performance Issues Detected"
-        } else {
-            switch trackingQuality {
-            case .normal:
-                return "Move slowly across the surface"
-            case .limited:
-                return "Move camera more slowly"
-            case .notAvailable:
-                return "Tracking lost"
-            }
-        }
-    }
-    
-    private var trackingQualityMessage: String {
-        switch trackingQuality {
-        case .normal:
-            return ""
-        case .limited:
-            return "⚠️ Limited tracking quality"
-        case .notAvailable:
-            return "❌ Tracking lost"
-        }
+        session.startCapturing()
+        capturedImageCount = 0
+        startImageCountTimer()
     }
 }
 

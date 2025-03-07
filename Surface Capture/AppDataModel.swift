@@ -120,12 +120,25 @@ class AppDataModel: ObservableObject, Identifiable {
         selectedImage = image
         captureType = .imagePlane
         
+        // First, properly clean up any existing capture session and monitoring task
+        if objectCaptureSession != nil {
+            // Cancel the session
+            objectCaptureSession?.cancel()
+            
+            // Cancel state monitoring task
+            stateMonitoringTask?.cancel()
+            stateMonitoringTask = nil
+            
+            // Clear the session
+            objectCaptureSession = nil
+        }
+        
         // Create plane entity
         if selectedModelEntity == nil {
             selectedModelEntity = ImagePlaneEntity.create(from: image)
         } else {
             if let entity = selectedModelEntity {
-                //ImagePlaneEntity.updateTexture(entity, with: image)
+                ImagePlaneEntity.updateTexture(entity, with: image)
             }
         }
         
@@ -133,9 +146,6 @@ class AppDataModel: ObservableObject, Identifiable {
         isImagePlacementMode = true
         isShowingPlacementInstructions = true
         
-        // Cancel any ongoing object capture session
-        objectCaptureSession?.cancel()
-        objectCaptureSession = nil
         // Important: Change state last to trigger view updates
         state = .ready
     }
@@ -154,43 +164,111 @@ class AppDataModel: ObservableObject, Identifiable {
     }
     
     // MARK: - Object Capture Functionality
-
     func startNewCapture() -> Bool {
         logger.log("Starting new capture...")
+        
+        // Reset any existing state or sessions
+        if objectCaptureSession != nil {
+            logger.debug("Cleaning up existing capture session before starting new one")
+            objectCaptureSession?.cancel()
+            objectCaptureSession = nil
+        }
+        
+        // Check device support first
         guard ObjectCaptureSession.isSupported else {
-            logger.error("Your device isn't equipt to perform object capture")
+            logger.error("Object capture is not supported on this device")
+            let error = NSError(domain: "com.example.SurfaceCapture",
+                                code: 1001,
+                                userInfo: [NSLocalizedDescriptionKey: "Your device doesn't support object capture"])
+            switchToErrorState(error: error)
             return false
         }
         
+        // Create folder manager with proper error handling
         guard let folderManager = CaptureFolderManager() else {
-            logger.error("Failed to create folder manager")
+            logger.error("Failed to create folder manager for capture storage")
+            let error = NSError(domain: "com.example.SurfaceCapture",
+                                code: 1002,
+                                userInfo: [NSLocalizedDescriptionKey: "Could not create storage for capture. Please check device storage."])
+            switchToErrorState(error: error)
             return false
         }
 
         scanFolderManager = folderManager
-        objectCaptureSession = ObjectCaptureSession()
-
-        guard let session = objectCaptureSession else {
-            logger.error("Failed to create capture session")
-            return false
-        }
-
+        
+        // Initialize ObjectCaptureSession without try-catch since these methods don't throw
+        let session = ObjectCaptureSession()
+        self.objectCaptureSession = session
+        
         var configuration = ObjectCaptureSession.Configuration()
         configuration.checkpointDirectory = scanFolderManager.snapshotsFolder
         configuration.isOverCaptureEnabled = true // Enable over-capture for better coverage
-
+        
+        // Start the session and verify proper initialization
         session.start(imagesDirectory: scanFolderManager.imagesFolder, configuration: configuration)
-
+        
+        // Check immediate state to catch early failures
         if case let .failed(error) = session.state {
             logger.error("Session failed to start: \(String(describing: error))")
             switchToErrorState(error: error)
+            objectCaptureSession = nil
             return false
-        } else {
-            state = .capturing
-            return true
+        }
+        
+        // Set a monitoring task to detect any failures after initialization
+        monitorSessionState(session)
+        
+        // Update app state to indicate we're capturing now
+        state = .capturing
+        return true
+    }
+
+    /// Sets up state monitoring for the session to catch failures after initialization
+    private func monitorSessionState(_ session: ObjectCaptureSession) {
+        // Cancel any existing monitoring task
+        stateMonitoringTask?.cancel()
+        
+        // Create a new task to monitor session state changes
+        stateMonitoringTask = Task { [weak self] in
+            do {
+                // Wait a short time to allow the session to initialize
+                try await Task.sleep(for: .seconds(0.5))
+                
+                // Check if session entered a failure state during initialization
+                if case let .failed(error) = session.state {
+                    await MainActor.run { [weak self] in
+                        guard let self = self else { return }
+                        logger.error("Session failed during initialization: \(String(describing: error))")
+                        switchToErrorState(error: error)
+                    }
+                    return
+                }
+                
+                // Continue monitoring state for later failures
+                for try await state in session.stateUpdates {
+                    if case let .failed(error) = state {
+                        await MainActor.run { [weak self] in
+                            guard let self = self else { return }
+                            logger.error("Session failed during operation: \(String(describing: error))")
+                            switchToErrorState(error: error)
+                        }
+                        break
+                    }
+                }
+            } catch {
+                // Handle task cancellation gracefully
+                if !Task.isCancelled {
+                    await MainActor.run { [weak self] in
+                        guard let self = self else { return }
+                        logger.error("Error monitoring session state: \(error)")
+                    }
+                }
+            }
         }
     }
 
+    // Add to AppDataModel class property section:
+    private var stateMonitoringTask: Task<Void, Never>?
     @Published var reconstructionProgress: Double = 0
 
     private func verifyReconstructionAssets(baseFolder: URL, snapshotID: String) -> Bool {
@@ -386,7 +464,7 @@ class AppDataModel: ObservableObject, Identifiable {
                         break
 
                     case .requestProgress(_, let fractionComplete):
-                        logger.debug("Progress: \(fractionComplete * 100)%")
+                        //logger.debug("Progress: \(fractionComplete * 100)%")
                         DispatchQueue.main.async {
                             self.reconstructionProgress = fractionComplete
                         }

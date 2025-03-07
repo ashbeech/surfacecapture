@@ -1,8 +1,3 @@
-//
-//  ContentView.swift
-//  Surface Capture App
-//
-
 import RealityKit
 import SwiftUI
 import os
@@ -35,6 +30,7 @@ struct ContentView: View {
                     capturedModelURL = nil
                     appModel.state = .ready
                 }
+                .environmentObject(appModel)
                 .edgesIgnoringSafeArea(.all)
             } else if appModel.state == .capturing {
                 if let session = appModel.objectCaptureSession, !sessionInitializing {
@@ -42,7 +38,6 @@ struct ContentView: View {
                     CapturePrimaryView(session: session)
                         .environmentObject(appModel)
                 } else {
-                   /*
                     // Show a loading view while session initializes
                     VStack {
                         CircularProgressView()
@@ -50,23 +45,11 @@ struct ContentView: View {
                             .font(.headline)
                             .padding()
                     }
-                    */
                 }
             } else if appModel.state == .reconstructing || appModel.state == .prepareToReconstruct {
-                // Show progress view during reconstruction
-                ZStack {
-                    Color(.systemBackground)
-                        .ignoresSafeArea()
-                    
-                    VStack(spacing: 30) {
-                        ProcessingProgressView(progress: appModel.reconstructionProgress)
-                        
-                        if appModel.reconstructionProgress == 0 {
-                            Text("Preparing to process...")
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
+                // Use our enhanced ProcessingProgressView with title and back button
+                ProcessingProgressView(progress: appModel.reconstructionProgress)
+                    .environmentObject(appModel)
             } else if showProgressView {
                 CircularProgressView()
             }
@@ -77,7 +60,6 @@ struct ContentView: View {
             if newState == .capturing {
                 // When transitioning to capturing state, set initializing to true briefly
                 // to ensure the session is properly set up before showing the capture view
-                /*
                 sessionInitializing = true
                 
                 // Check session state after a short delay to let initialization complete
@@ -92,11 +74,10 @@ struct ContentView: View {
                         // No session available
                         showErrorAlert = true
                     }
-                }*/
+                }
             } else if newState == .failed {
                 showErrorAlert = true
                 showReconstructionView = false
-                
             } else if newState == .viewing {
                 if appModel.captureType == .objectCapture {
                     // Only show reconstruction view for object capture
@@ -119,6 +100,7 @@ struct ContentView: View {
                 ModelView(modelFile: outputFile) {
                     capturedModelURL = outputFile
                 }
+                .environmentObject(appModel)
             }
         }
         .alert(
@@ -136,41 +118,121 @@ struct ContentView: View {
     }
 }
 
-/*
- // Create the ARImagePlaneView for displaying the image in AR
- @available(iOS 17.0, *)
- struct ARImagePlaneView: UIViewControllerRepresentable {
- @EnvironmentObject var appModel: AppDataModel
- 
- func makeUIViewController(context: Context) -> ARPlaneCaptureViewController {
- ContentView.logger.debug("Creating ARPlaneCaptureViewController for image plane mode")
- 
- // Create controller with the proper mode and entity
- let controller = ARPlaneCaptureViewController(
- mode: .imagePlane,
- entity: appModel.selectedModelEntity
- )
- 
- appModel.arViewController = controller
- 
- return controller
- }
- 
- func updateUIViewController(_ uiViewController: ARPlaneCaptureViewController, context: Context) {
- // Update if the image changes
- if let selectedImage = appModel.selectedImage,
- let entity = appModel.selectedModelEntity {
- 
- ImagePlaneEntity.updateTexture(entity, with: selectedImage)
- }
- }
- 
- static func dismantleUIViewController(_ uiViewController: ARPlaneCaptureViewController, coordinator: ()) {
- uiViewController.pauseARSession()
- }
- }
- */
-
+struct ProcessingProgressView: View {
+    let progress: Double
+    @EnvironmentObject var appModel: AppDataModel
+    
+    var body: some View {
+        ZStack {
+            // Full screen background
+            Color(.systemBackground)
+                .ignoresSafeArea()
+            
+            // Main content
+            VStack {
+                // Top Navigation - Title and Back button
+                HStack {
+                    // Back Button
+                    Button(action: {
+                        // Cancel the reconstruction process
+                        appModel.photogrammetrySession?.cancel()
+                        
+                        // Reset everything and go back to capture state
+                        appModel.isImagePlacementMode = false
+                        appModel.selectedImage = nil
+                        appModel.selectedModelEntity = nil
+                        appModel.captureType = .objectCapture
+                        
+                        // Reset the state to restart
+                        appModel.state = .restart
+                    }) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(width: 40, height: 40)
+                    }
+                    .background(Color.black.opacity(0.7))
+                    .clipShape(Circle())
+                    .padding(.leading, 20)
+                    
+                    Spacer()
+                    
+                    // Title
+                    Text("Processing Scan")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.black.opacity(0.7))
+                        .cornerRadius(10)
+                    
+                    Spacer()
+                    
+                    // Empty view for balance
+                    Color.clear
+                        .frame(width: 40, height: 40)
+                        .padding(.trailing, 20)
+                }
+                .padding(.top, 60) // To clear status bar
+                
+                Spacer()
+                
+                // Progress indicator
+                VStack(spacing: 20) {
+                    Text("Processing Scan")
+                        .font(.headline)
+                    
+                    ZStack(alignment: .leading) {
+                        GeometryReader { geometry in
+                            // Background of progress bar
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(height: 20)
+                            
+                            // Foreground of progress bar
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color.blue)
+                                .frame(width: max(0, min(geometry.size.width * CGFloat(progress), geometry.size.width)), height: 20)
+                        }
+                        .frame(height: 20)
+                    }
+                    .frame(height: 20)
+                    
+                    Text("\(Int(progress * 100))%")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    if progress < 0.01 {
+                        Text("Preparing to process...")
+                            .foregroundColor(.secondary)
+                    } else if progress < 1.0 {
+                        Text("Creating 3D model...")
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text("Finalizing model...")
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding()
+                .background(Color(.systemBackground))
+                .cornerRadius(15)
+                .shadow(radius: 5)
+                .padding(.horizontal, 40)
+                
+                Spacer()
+                
+                // Information text at bottom
+                Text("Processing performance depends on your device model and scan complexity.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
+                    .padding(.bottom, 40)
+            }
+            .edgesIgnoringSafeArea(.top)
+        }
+    }
+}
 private struct CircularProgressView: View {
     @Environment(\.colorScheme) private var colorScheme
     
@@ -188,41 +250,6 @@ private struct CircularProgressView: View {
     }
 }
 
-struct ProcessingProgressView: View {
-    let progress: Double
-    
-    var body: some View {
-        VStack(spacing: 20) {
-            Text("Processing Surface Capture")
-                .font(.headline)
-            
-            ZStack(alignment: .leading) {
-                GeometryReader { geometry in
-                    // Background of progress bar
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.gray.opacity(0.3))
-                        .frame(height: 20)
-                    
-                    // Foreground of progress bar
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.blue)
-                        .frame(width: max(0, min(geometry.size.width * CGFloat(progress), geometry.size.width)), height: 20)
-                }
-                .frame(height: 20)
-            }
-            .frame(height: 20)
-            
-            Text("\(Int(progress * 100))%")
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-        }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(15)
-        .shadow(radius: 5)
-        .padding(.horizontal, 40)
-    }
-}
 #if DEBUG
 @available(iOS 17.0, *)
 struct ContentView_Previews: PreviewProvider {
