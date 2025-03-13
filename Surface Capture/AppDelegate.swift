@@ -12,11 +12,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     var window: UIWindow?
 
-
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Prevent screen from sleeping during capture
         UIApplication.shared.isIdleTimerDisabled = true
 
+        // Audio session setup
         do {
             let audioSession = AVAudioSession.sharedInstance()
             try audioSession.setCategory(.ambient, mode: .default)
@@ -24,6 +24,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         } catch {
             print("Failed to set up audio session: \(error)")
         }
+        
+        // First launch check for onboarding
+        setupFirstLaunchDefaults()
         
         // Create the SwiftUI view that provides the window contents.
         let contentView = ContentView()
@@ -34,6 +37,25 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         self.window = window
         window.makeKeyAndVisible()
         return true
+    }
+    
+    private func setupFirstLaunchDefaults() {
+        // Check if this is the first time the app has been launched
+        let userDefaults = UserDefaults.standard
+        
+        // Only set default values if they haven't been set yet
+        if userDefaults.object(forKey: "onboardingShownCount") == nil {
+            userDefaults.set(0, forKey: "onboardingShownCount")
+        }
+        
+        if userDefaults.object(forKey: "hasSeenOnboarding") == nil {
+            userDefaults.set(false, forKey: "hasSeenOnboarding")
+        }
+        
+        // Define the number of times to show onboarding
+        if userDefaults.object(forKey: "maxOnboardingShows") == nil {
+            userDefaults.set(10, forKey: "maxOnboardingShows")
+        }
     }
 
     func applicationWillResignActive(_ application: UIApplication) {
@@ -50,12 +72,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func applicationWillEnterForeground(_ application: UIApplication) {
         // Called as part of the transition from the background to the active state; here you can undo many of the changes made on entering the background.
+        
+        // Reset idle timer disabling
+        UIApplication.shared.isIdleTimerDisabled = true
     }
 
     func applicationDidBecomeActive(_ application: UIApplication) {
         // Restart any tasks that were paused (or not yet started) while the application was inactive. If the application was previously in the background, optionally refresh the user interface.
     }
-
-
 }
-

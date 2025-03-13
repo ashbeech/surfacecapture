@@ -158,7 +158,7 @@ class ModelManipulator: ObservableObject {
         currentRotation = rotation
         
         // Update the transform matrix to reflect this rotation
-        if let modelEntity = modelEntity {
+        if modelEntity != nil {
             // Create a new transform with the updated rotation
             var newTransform = currentTransform
             

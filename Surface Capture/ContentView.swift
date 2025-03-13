@@ -8,6 +8,7 @@ struct ContentView: View {
                                category: "ContentView")
     
     @StateObject var appModel: AppDataModel = AppDataModel.instance
+    @StateObject var onboardingManager = OnboardingManager()
     @State private var capturedModelURL: URL?
     @State private var showReconstructionView: Bool = false
     @State private var showErrorAlert: Bool = false
@@ -52,6 +53,13 @@ struct ContentView: View {
                     .environmentObject(appModel)
             } else if showProgressView {
                 CircularProgressView()
+            }
+            
+            // Show onboarding view on top if needed
+            if onboardingManager.shouldShowOnboarding {
+                OnboardingView(isShowingOnboarding: $onboardingManager.shouldShowOnboarding)
+                    .transition(.opacity)
+                    .zIndex(100) // Ensure it's on top
             }
         }
         .onChange(of: appModel.state) { _, newState in
@@ -246,6 +254,23 @@ private struct CircularProgressView: View {
                 Spacer()
             }
             Spacer()
+        }
+    }
+}
+
+// Helper for showing onboarding from anywhere in the app
+extension View {
+    func withOnboardingReset(_ onboardingManager: OnboardingManager) -> some View {
+        self.toolbar {
+            #if DEBUG
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: {
+                    onboardingManager.resetOnboarding()
+                }) {
+                    Image(systemName: "info.circle")
+                }
+            }
+            #endif
         }
     }
 }

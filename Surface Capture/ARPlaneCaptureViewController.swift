@@ -27,6 +27,51 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
     private var activeModelEntity: ModelEntity?
     private var originalMaterials: [RealityKit.Material]?
     
+    private var transformHistory: [simd_float4x4] = []
+    private var currentHistoryIndex: Int = -1
+    private let maxHistorySize = 20
+    
+    // Associated object keys for streaming service reference
+    private struct AssociatedKeys {
+        // Use static variables of type void pointer instead of strings
+        static var streamingServiceKey = UnsafeRawPointer(bitPattern: "streamingServiceKey".hashValue)!
+        static var streamingHostingControllerKey = UnsafeRawPointer(bitPattern: "streamingHostingControllerKey".hashValue)!
+    }
+    
+    // Streaming service with lazy initialization to avoid creating it unnecessarily
+    var streamingService: ARStreamingService {
+        get {
+            // Use the void pointer directly
+            if let existingService = objc_getAssociatedObject(self, AssociatedKeys.streamingServiceKey) as? ARStreamingService {
+                return existingService
+            }
+            
+            // Create new service if none exists
+            let service = ARStreamingService()
+            
+            // Set up callbacks
+            service.onReceivedTransform = { [weak self] transform in
+                self?.applyReceivedTransform(transform)
+            }
+            
+            service.onReceivedWorldMap = { [weak self] worldMap in
+                self?.applyReceivedWorldMap(worldMap)
+            }
+            
+            // Store using associated object (safe way to avoid strong reference cycles)
+            objc_setAssociatedObject(
+                self,
+                AssociatedKeys.streamingServiceKey,
+                service,
+                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            )
+            
+            return service
+        }
+    }
+    
+    var mode: CaptureType = .objectCapture
+    
     @Published var isModelPlaced: Bool = false
     @Published var isModelSelected: Bool = false
     @Published var modelManipulator: ModelManipulator
@@ -38,8 +83,6 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
     @Published var lockedScale: Bool = false
     @Published var isWorkModeActive: Bool = false
     @Published var isStreamingActive: Bool = false
-
-    var mode: CaptureType = .objectCapture
     
     // Add these properties to track toggle states
     @Published var isAdjustingDepth: Bool = false
@@ -84,8 +127,6 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
     
     deinit {
         print("ARPlaneCaptureViewController is being deinitialized")
-        //cleanupSceneResources()
-        //cleanup()
     }
     
     override func viewDidLoad() {
@@ -110,93 +151,79 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         super.viewDidDisappear(animated)
         arView?.session.pause()
     }
-    /*
-     private func cleanup() {
-     
-     }
-     */
-    /*
-     func clearARScene() {
-     // Reset all state
-     isModelSelected = false
-     isModelPlaced = false
-     isPulsing = false
-     lockedPosition = false
-     lockedRotation = false
-     lockedScale = false
-     isWorkModeActive = false
-     
-     // Remove all subscriptions from ARView updates
-     if let arView = arView {
-     arView.scene.subscribe(to: SceneEvents.Update.self) { _ in }.cancel()
-     }
-     
-     // Clean up model resources
-     if let model = capturedPlaneModel {
-     // Remove the model component entirely instead of trying to modify it
-     model.components[ModelComponent.self] = nil
-     
-     // Remove collision components
-     model.components[CollisionComponent.self] = nil
-     
-     // Remove model from parent
-     model.removeFromParent()
-     }
-     
-     // Clean up all active anchors
-     activeAnchors.forEach { anchor in
-     // Remove all child entities first
-     anchor.children.forEach { entity in
-     if let modelEntity = entity as? ModelEntity {
-     // Remove model component
-     modelEntity.components[ModelComponent.self] = nil
-     modelEntity.components[CollisionComponent.self] = nil
-     }
-     entity.removeFromParent()
-     }
-     anchor.removeFromParent()
-     }
-     activeAnchors.removeAll()
-     
-     // Clean up current anchor
-     if let currentAnchor = currentAnchor {
-     currentAnchor.children.forEach { $0.removeFromParent() }
-     currentAnchor.removeFromParent()
-     self.currentAnchor = nil
-     }
-     
-     // Clean up plane anchors
-     planeAnchors.forEach { (arAnchor, entity) in
-     entity.components[CollisionComponent.self] = nil
-     entity.removeFromParent()
-     }
-     planeAnchors.removeAll()
-     
-     // Reset ARView scene
-     if let arView = arView {
-     // Remove all anchors from the scene
-     arView.scene.anchors.removeAll()
-     
-     // Reset environment to a neutral state
-     if let resource = try? EnvironmentResource.load(named: "white") {
-     arView.environment.lighting.resource = resource
-     }
-     
-     // Clear debug options
-     arView.debugOptions = []
-     
-     // Remove coaching overlay if present
-     arView.subviews.forEach { view in
-     if view is ARCoachingOverlayView {
-     view.removeFromSuperview()
-     }
-     }
-     }
-     
-     // Clean up AR resources
-     cleanup()
-     }
-     */
+    
+    var canUndo: Bool {
+        return currentHistoryIndex > 0
+    }
+    
+    var canRedo: Bool {
+        return currentHistoryIndex < transformHistory.count - 1
+    }
+    
+    // Method to save current transformation to history
+    func saveTransformToHistory() {
+        guard let modelEntity = capturedPlaneModel else { return }
+        
+        // Get the current transform
+        let currentTransform = modelEntity.transform.matrix
+        
+        // If we're not at the end of the history (user has performed undo),
+        // remove all future states before adding the new one
+        if currentHistoryIndex < transformHistory.count - 1 {
+            transformHistory.removeSubrange((currentHistoryIndex + 1)...)
+        }
+        
+        // Add current transform to history
+        transformHistory.append(currentTransform)
+        
+        // Update current index
+        currentHistoryIndex = transformHistory.count - 1
+        
+        // Trim history if it gets too large
+        if transformHistory.count > maxHistorySize {
+            transformHistory.removeFirst(transformHistory.count - maxHistorySize)
+            currentHistoryIndex = transformHistory.count - 1
+        }
+        
+        // Force UI update to refresh undo/redo button states
+        objectWillChange.send()
+    }
+    
+    // Method to undo last transformation
+    func undoTransformation() {
+        guard canUndo, let modelEntity = capturedPlaneModel else { return }
+        
+        // Move back in history
+        currentHistoryIndex -= 1
+        
+        // Apply the previous transform from history
+        let previousTransform = transformHistory[currentHistoryIndex]
+        modelEntity.transform = Transform(matrix: previousTransform)
+        
+        // Force UI update
+        objectWillChange.send()
+    }
+    
+    // Method to redo transformation
+    func redoTransformation() {
+        guard canRedo, let modelEntity = capturedPlaneModel else { return }
+        
+        // Move forward in history
+        currentHistoryIndex += 1
+        
+        // Apply the next transform from history
+        let nextTransform = transformHistory[currentHistoryIndex]
+        modelEntity.transform = Transform(matrix: nextTransform)
+        
+        // Force UI update
+        objectWillChange.send()
+    }
+    
+    // Store previous lock states
+    private var previousLockedRotation: Bool = false
+    private var previousLockedPosition: Bool = false
+    private var previousLockedScale: Bool = false
+    
     func clearARScene() {
         // Reset all state
         isModelSelected = false
@@ -207,7 +234,7 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         lockedScale = false
         isWorkModeActive = false
         isStreamingActive = false
-
+        
         // Stop AR session and remove all anchors
         arView?.session.pause()
         
@@ -375,7 +402,23 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         guard !isWorkModeActive, !lockedRotation, let modelEntity = capturedPlaneModel,
               modelManipulator.currentState == .none else { return }
         
+        // Auto-disable any active axis rotation or depth adjustment when rotation begins
         if gesture.state == .began {
+            // If any axis toggle is active, turn it off since this is a two-finger gesture
+            if isRotatingX || isRotatingY || isRotatingZ || isAdjustingDepth {
+                // Turn off all toggles
+                isRotatingX = false
+                isRotatingY = false
+                isRotatingZ = false
+                isAdjustingDepth = false
+                
+                // End the manipulation state
+                modelManipulator.endManipulation()
+                
+                // Force UI update
+                objectWillChange.send()
+            }
+            
             // Reset lastRotation for this gesture
             lastRotation = .zero
             // Store the current orientation at gesture start
@@ -397,20 +440,33 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         if gesture.state == .ended {
             // Clear the initial orientation reference
             initialGestureOrientation = nil
-            
-            // Important: We don't reset rotation values here, so the next gesture
-            // will start from wherever this one left off
+            saveTransformToHistory()
         }
     }
-
+    
     // Add this property to ARPlaneCaptureViewController class if it doesn't exist:
     private var initialGestureOrientation: simd_quatf?
     
     @objc private func handlePinch(_ gesture: UIPinchGestureRecognizer) {
-        guard !isWorkModeActive, !lockedScale, let modelEntity = capturedPlaneModel,
-              modelManipulator.currentState == .none else { return }
+        guard !isWorkModeActive, !lockedScale, let modelEntity = capturedPlaneModel else { return }
         
+        // Auto-disable any active axis rotation or depth adjustment when pinching begins
         if gesture.state == .began {
+            // If any axis toggle is active, turn it off since this is a two-finger gesture
+            if isRotatingX || isRotatingY || isRotatingZ || isAdjustingDepth {
+                // Turn off all toggles
+                isRotatingX = false
+                isRotatingY = false
+                isRotatingZ = false
+                isAdjustingDepth = false
+                
+                // End the manipulation state
+                modelManipulator.endManipulation()
+                
+                // Force UI update
+                objectWillChange.send()
+            }
+            
             lastScale = 1.0
         }
         
@@ -422,6 +478,7 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         
         if gesture.state == .ended {
             lastScale = 1.0
+            saveTransformToHistory()
         }
     }
     
@@ -445,8 +502,8 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         
         let forwardVector = SIMD3<Float>(
             -cameraTransform.matrix.columns.2.x,
-            -cameraTransform.matrix.columns.2.y,
-            -cameraTransform.matrix.columns.2.z
+             -cameraTransform.matrix.columns.2.y,
+             -cameraTransform.matrix.columns.2.z
         )
         
         // Scale factors (adjusted for better control)
@@ -462,12 +519,14 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
                 anchorTransform.columns.1.z
             )
             
-            // Get camera's up vector
-            let cameraUpVector = SIMD3<Float>(
-                cameraTransform.matrix.columns.1.x,
-                cameraTransform.matrix.columns.1.y,
-                cameraTransform.matrix.columns.1.z
-            )
+            /*
+             // Get camera's up vector
+             let cameraUpVector = SIMD3<Float>(
+             cameraTransform.matrix.columns.1.x,
+             cameraTransform.matrix.columns.1.y,
+             cameraTransform.matrix.columns.1.z
+             )
+             */
             
             // Project camera's right vector onto anchor plane
             let planeNormal = normalize(anchorUpVector)
@@ -510,6 +569,10 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         
         lastPanLocation = gesture.location(in: gesture.view)
         gesture.setTranslation(.zero, in: gesture.view)
+        
+        if gesture.state == .ended {
+            saveTransformToHistory()
+        }
     }
     
     private var outlineEntity: ModelEntity?
@@ -771,6 +834,8 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
                 arView.scene.addAnchor(newAnchor)
                 currentAnchor = newAnchor
                 activeAnchors.insert(newAnchor)
+                
+                saveTransformToHistory()
             }
         }
     }
@@ -834,10 +899,7 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
     }
     
     @objc func handleModelManipulation(_ gesture: UIPanGestureRecognizer) {
-        
         guard !isWorkModeActive, let modelEntity = capturedPlaneModel, isModelSelected else { return }
-        
-        guard let modelEntity = capturedPlaneModel, isModelSelected else { return }
         
         let location = gesture.location(in: arView)
         
@@ -851,19 +913,37 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
             let deltaY = Float(location.y - lastLocation.y)
             let deltaX = Float(location.x - lastLocation.x)
             
+            // Use appropriate scaling factors for each axis to make the response feel natural
             switch modelManipulator.currentState {
             case .rotatingX:
+                // For X rotation, use vertical movement (deltaY)
                 let rotation = deltaY * 0.01
                 let newRotation = modelManipulator.updateRotation(delta: rotation, for: .rotatingX)
                 modelEntity.transform.rotation = newRotation
                 
             case .rotatingY:
+                // For Y rotation, use horizontal movement (deltaX)
                 let rotation = deltaX * 0.01
                 let newRotation = modelManipulator.updateRotation(delta: rotation, for: .rotatingY)
                 modelEntity.transform.rotation = newRotation
                 
             case .rotatingZ:
-                let rotation = deltaY * 0.01
+                // For Z rotation, we'll implement a more natural control by using a rotation around the center
+                // Calculate the center of the view
+                let centerX = arView.bounds.width / 2
+                let centerY = arView.bounds.height / 2
+                
+                // Calculate vectors from center to current and previous positions
+                let previousVector = CGPoint(x: lastLocation.x - centerX, y: lastLocation.y - centerY)
+                let currentVector = CGPoint(x: location.x - centerX, y: location.y - centerY)
+                
+                // Calculate the angle between these vectors (in radians)
+                let angle1 = atan2(previousVector.y, previousVector.x)
+                let angle2 = atan2(currentVector.y, currentVector.x)
+                
+                // Apply the rotation
+                //let rotation = Float(angleChange) * 0.5 // Scale factor to make rotation feel natural
+                let rotation = deltaX * 0.01
                 let newRotation = modelManipulator.updateRotation(delta: rotation, for: .rotatingZ)
                 modelEntity.transform.rotation = newRotation
                 
@@ -881,6 +961,7 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
             
         case .ended:
             modelManipulator.lastDragLocation = nil
+            saveTransformToHistory()
             
         default:
             break
@@ -910,27 +991,13 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         isModelSelected = false
         outlineEntity?.removeFromParent()
         outlineEntity = nil
+        saveTransformToHistory()
     }
     
     func removeCoachingOverlay() {
         if let coachingOverlay = arView?.subviews.first(where: { $0 is ARCoachingOverlayView }) as? ARCoachingOverlayView {
             coachingOverlay.setActive(false, animated: true)
             coachingOverlay.removeFromSuperview()
-        }
-    }
-    
-    func toggleStreamMode() {
-        isStreamingActive.toggle()
-        
-        if isStreamingActive {
-            // Placeholder for real streaming functionality
-            // This would connect to another device, perhaps using MultipeerConnectivity
-            print("Streaming mode activated")
-            showToast(message: "Streaming started")
-        } else {
-            // Stop streaming
-            print("Streaming mode deactivated")
-            showToast(message: "Streaming stopped")
         }
     }
     
@@ -982,6 +1049,10 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
                 
                 // Initialize the model manipulator with this entity
                 modelManipulator.setModelEntity(modelEntity)
+                
+                // Add initial transform to history
+                transformHistory = [modelEntity.transform.matrix]
+                currentHistoryIndex = 0
                 
                 showToast(message: "Model loaded successfully")
             } catch {
@@ -1081,13 +1152,13 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         
         // 2. Get the anchor plane's normal (usually [0, 1, 0] for horizontal surfaces)
         guard let arView = arView,
-              let raycast = arView.raycast(from: arView.center, 
-                                         allowing: .estimatedPlane, 
-                                         alignment: .any).first else { return }
+              let raycast = arView.raycast(from: arView.center,
+                                           allowing: .estimatedPlane,
+                                           alignment: .any).first else { return }
         
         let anchorNormal = SIMD3<Float>(raycast.worldTransform.columns.1.x,
-                                       raycast.worldTransform.columns.1.y,
-                                       raycast.worldTransform.columns.1.z)
+                                        raycast.worldTransform.columns.1.y,
+                                        raycast.worldTransform.columns.1.z)
         
         // 3. Calculate rotation to align normals
         let rotationAxis = cross(primaryNormal, anchorNormal)
@@ -1103,6 +1174,8 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
             modelManipulator.setCurrentRotation(alignmentRotation)
             modelManipulator.saveCurrentTransform()  // Save this as the new baseline transform
         }
+        
+        saveTransformToHistory()
     }
     
     func toggleDepthAdjustment() {
@@ -1178,6 +1251,211 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         objectWillChange.send()
     }
     
+    func toggleStreamMode() {
+        isStreamingActive.toggle()
+        
+        if isStreamingActive {
+            showStreamingInterface()
+        } else {
+            stopStreaming()
+            hideStreamingInterface()
+        }
+    }
+    
+    private func showStreamingInterface() {
+        let service = streamingService
+        
+        // Create hosting controller for the streaming interface
+        let streamingView = StreamingView(streamingService: service)
+        let hostingController = UIHostingController(rootView: streamingView)
+        
+        // Keep reference to the hosting controller to prevent it from being deallocated
+        objc_setAssociatedObject(
+            self,
+            &AssociatedKeys.streamingHostingControllerKey,
+            hostingController,
+            .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+        )
+        
+        // Add as child view controller
+        addChild(hostingController)
+        
+        hostingController.view.frame = view.bounds
+        hostingController.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        hostingController.view.backgroundColor = UIColor.systemBackground.withAlphaComponent(0.9)
+        view.addSubview(hostingController.view)
+        
+        // Animate in
+        hostingController.view.alpha = 0
+        UIView.animate(withDuration: 0.3) {
+            hostingController.view.alpha = 1
+        }
+        
+        hostingController.didMove(toParent: self)
+    }
+    
+    private func hideStreamingInterface() {
+        guard let hostingController = objc_getAssociatedObject(self, &AssociatedKeys.streamingHostingControllerKey) as? UIHostingController<StreamingView> else {
+            return
+        }
+        
+        // Animate out and remove
+        UIView.animate(withDuration: 0.3) {
+            hostingController.view.alpha = 0
+        } completion: { _ in
+            hostingController.willMove(toParent: nil)
+            hostingController.view.removeFromSuperview()
+            hostingController.removeFromParent()
+            
+            // Clear reference
+            objc_setAssociatedObject(
+                self,
+                &AssociatedKeys.streamingHostingControllerKey,
+                nil,
+                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            )
+        }
+    }
+    
+    // MARK: - Streaming Start/Stop
+    
+    func startStreaming() {
+        guard let arView = arView else {
+            print("Cannot start streaming: ARView is nil")
+            return
+        }
+        
+        // Ensure model is placed and selected
+        guard isModelPlaced, let modelEntity = capturedPlaneModel else {
+            showToast(message: "Place a model before streaming")
+            return
+        }
+        
+        // Start streaming in host mode
+        streamingService.startHosting()
+        
+        // Small delay to ensure connection is ready
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            guard let self = self else { return }
+            
+            // Start the AR streaming
+            self.streamingService.startStreaming(arView: arView, modelEntity: modelEntity)
+            
+            // Show UI indicator for streaming
+            self.showStreamingStatusIndicator()
+            
+            // Lock interface elements during streaming
+            self.lockInterfaceDuringStreaming(true)
+        }
+    }
+    
+    func stopStreaming() {
+        // Stop streaming service
+        streamingService.stopStreaming()
+        streamingService.disconnect()
+        
+        // Remove UI indicators
+        removeStreamingStatusIndicator()
+        
+        // Unlock interface
+        lockInterfaceDuringStreaming(false)
+    }
+    
+    // MARK: - Receiver Mode Methods
+    
+    private func applyReceivedTransform(_ transform: Transform) {
+        // Apply received transform to local model entity
+        guard let modelEntity = capturedPlaneModel else { return }
+        
+        // Apply transform with animation for smoothness
+        withAnimation(.easeInOut(duration: 0.1)) {
+            modelEntity.transform = transform
+        }
+    }
+    
+    private func applyReceivedWorldMap(_ worldMap: ARWorldMap) {
+        guard let arView = arView else { return }
+        
+        // Create configuration with the received world map
+        let configuration = ARWorldTrackingConfiguration()
+        configuration.planeDetection = [.horizontal, .vertical]
+        configuration.initialWorldMap = worldMap
+        
+        // Reset and run the session with the new configuration
+        arView.session.pause()
+        arView.session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
+        
+        showToast(message: "Received AR world map from host")
+    }
+    
+    // MARK: - UI Helpers
+    
+    private func showStreamingStatusIndicator() {
+        // Create a visual indicator for active streaming
+        let indicator = UILabel()
+        indicator.text = "AR Streaming Active"
+        indicator.textAlignment = .center
+        indicator.textColor = .white
+        indicator.backgroundColor = UIColor.systemBlue.withAlphaComponent(0.8)
+        indicator.layer.cornerRadius = 10
+        indicator.clipsToBounds = true
+        indicator.tag = 1001 // Tag for identification
+        
+        // Add to view
+        indicator.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(indicator)
+        
+        NSLayoutConstraint.activate([
+            indicator.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 100),
+            indicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            indicator.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, multiplier: 0.8),
+            indicator.heightAnchor.constraint(equalToConstant: 40)
+        ])
+        
+        // Add pulsing animation
+        UIView.animate(withDuration: 1.5, delay: 0, options: [.repeat, .autoreverse, .allowUserInteraction], animations: {
+            indicator.alpha = 0.6
+        })
+    }
+    
+    private func removeStreamingStatusIndicator() {
+        // Remove streaming indicator if it exists
+        if let indicator = view.viewWithTag(1001) {
+            UIView.animate(withDuration: 0.3, animations: {
+                indicator.alpha = 0
+            }) { _ in
+                indicator.removeFromSuperview()
+            }
+        }
+    }
+    
+    private func lockInterfaceDuringStreaming(_ lock: Bool) {
+        // When streaming, lock certain interface elements to prevent changes
+        if lock {
+            // Store current state
+            previousLockedRotation = lockedRotation
+            previousLockedPosition = lockedPosition
+            previousLockedScale = lockedScale
+            
+            // Lock all manipulations during streaming
+            lockedRotation = true
+            lockedPosition = true
+            lockedScale = true
+            
+            // Disable other functionality during streaming
+            isModelSelected = false
+            updateModelHighlight(isSelected: false)
+        } else {
+            // Restore previous state
+            lockedRotation = previousLockedRotation
+            lockedPosition = previousLockedPosition
+            lockedScale = previousLockedScale
+        }
+        
+        // Force UI update
+        objectWillChange.send()
+    }
+    
 }
 
 extension ARPlaneCaptureViewController: UIGestureRecognizerDelegate {
@@ -1186,3 +1464,11 @@ extension ARPlaneCaptureViewController: UIGestureRecognizerDelegate {
         return true
     }
 }
+
+#if DEBUG
+struct ARStreamingView_Previews: PreviewProvider {
+    static var previews: some View {
+        StreamingView(streamingService: ARStreamingService())
+    }
+}
+#endif

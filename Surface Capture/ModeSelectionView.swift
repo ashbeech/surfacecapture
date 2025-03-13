@@ -1,4 +1,0 @@
-//
-//  ModeSelectionView.swift
-//  Surface Capture
-//

@@ -59,6 +59,22 @@ struct ARSceneView: View {
                     
                     Spacer()
                     
+                    // Undo Button
+                    Button(action: {
+                        arController.undoTransformation()
+                    }) {
+                        Image(systemName: "arrow.uturn.backward")
+                            .font(.system(size: 20))
+                            .foregroundColor(.white)
+                            .frame(width: 40, height: 40)
+                    }
+                    .background(arController.canUndo ? Color.black.opacity(0.7) : Color.gray.opacity(0.4))
+                    .clipShape(Circle())
+                    .disabled(!arController.canUndo)
+                    .padding(.leading, 10)
+                    
+                    Spacer()
+                    
                     // Show mode indicator in work mode
                     if arController.isWorkModeActive {
                         Text("Work Mode")
@@ -71,6 +87,20 @@ struct ARSceneView: View {
                     }
                     
                     Spacer()
+                    
+                    // Redo Button
+                    Button(action: {
+                        arController.redoTransformation()
+                    }) {
+                        Image(systemName: "arrow.uturn.forward")
+                            .font(.system(size: 20))
+                            .foregroundColor(.white)
+                            .frame(width: 40, height: 40)
+                    }
+                    .background(arController.canRedo ? Color.black.opacity(0.7) : Color.gray.opacity(0.4))
+                    .clipShape(Circle())
+                    .disabled(!arController.canRedo)
+                    .padding(.trailing, 10)
                     
                     // Work Mode / Streaming Button depending on context
                     if arController.isWorkModeActive {
