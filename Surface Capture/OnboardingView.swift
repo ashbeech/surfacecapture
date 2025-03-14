@@ -8,6 +8,7 @@ import Combine
 
 struct OnboardingView: View {
     @Binding var isShowingOnboarding: Bool
+    @ObservedObject var onboardingManager: OnboardingManager
     @State private var currentPage = 0
     
     // Animation states
@@ -62,7 +63,7 @@ struct OnboardingView: View {
                         }
                     } else {
                         // Final page, dismiss onboarding
-                        UserDefaults.standard.set(true, forKey: "hasSeenOnboarding")
+                        onboardingManager.completeOnboarding()
                         isShowingOnboarding = false
                     }
                 }) {
@@ -75,6 +76,23 @@ struct OnboardingView: View {
                 }
                 .padding(.bottom, 50)
             }
+        }
+        // Add debug button in debug builds
+        .overlay(alignment: .topTrailing) {
+            #if DEBUG
+            Button(action: {
+                print("Debug - Skip onboarding")
+                onboardingManager.completeOnboarding()
+                isShowingOnboarding = false
+            }) {
+                Text("Skip")
+                    .font(.caption)
+                    .padding(8)
+                    .background(Color.gray.opacity(0.2))
+                    .cornerRadius(8)
+            }
+            .padding()
+            #endif
         }
     }
     
@@ -309,47 +327,11 @@ struct OnboardingView: View {
     }
 }
 
-// Onboarding Manager
-class OnboardingManager: ObservableObject {
-    @Published var shouldShowOnboarding: Bool = false
-    
-    // Number of times to show onboarding (can be adjusted)
-    private let maxOnboardingShows = 10
-    
-    init() {
-        checkOnboardingStatus()
-    }
-    
-    func checkOnboardingStatus() {
-        let hasSeenOnboarding = UserDefaults.standard.bool(forKey: "hasSeenOnboarding")
-        let onboardingShownCount = UserDefaults.standard.integer(forKey: "onboardingShownCount")
-        
-        if !hasSeenOnboarding && onboardingShownCount < maxOnboardingShows {
-            shouldShowOnboarding = true
-            
-            // Increment shown count
-            UserDefaults.standard.set(onboardingShownCount + 1, forKey: "onboardingShownCount")
-        } else {
-            shouldShowOnboarding = false
-        }
-    }
-    
-    func skipOnboarding() {
-        UserDefaults.standard.set(true, forKey: "hasSeenOnboarding")
-        shouldShowOnboarding = false
-    }
-    
-    func resetOnboarding() {
-        UserDefaults.standard.set(false, forKey: "hasSeenOnboarding")
-        UserDefaults.standard.set(0, forKey: "onboardingShownCount")
-        shouldShowOnboarding = true
-    }
-}
-
 #if DEBUG
 struct OnboardingView_Previews: PreviewProvider {
     static var previews: some View {
-        OnboardingView(isShowingOnboarding: .constant(true))
+        let manager = OnboardingManager()
+        OnboardingView(isShowingOnboarding: .constant(true), onboardingManager: manager)
     }
 }
 #endif

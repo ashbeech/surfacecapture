@@ -1,3 +1,8 @@
+//
+//  ContentView.swift
+//  Surface Capture App
+//
+
 import RealityKit
 import SwiftUI
 import os
@@ -20,44 +25,48 @@ struct ContentView: View {
     
     var body: some View {
         ZStack {
-            // If in image plane mode and we have a selected image, show the AR view
-            if appModel.captureType == .imagePlane && appModel.isImagePlacementMode {
-                // Show the image plane AR view
-                ARSceneView(capturedModelURL: nil, arController: ARPlaneCaptureViewController(mode: .imagePlane, entity: appModel.selectedModelEntity))
+            // Main app content
+            ZStack {
+                // If in image plane mode and we have a selected image, show the AR view
+                if appModel.captureType == .imagePlane && appModel.isImagePlacementMode {
+                    // Show the image plane AR view
+                    ARSceneView(capturedModelURL: nil, arController: ARPlaneCaptureViewController(mode: .imagePlane, entity: appModel.selectedModelEntity))
+                        .environmentObject(appModel)
+                        .edgesIgnoringSafeArea(.all)
+                } else if let modelURL = capturedModelURL {
+                    ModelView(modelFile: modelURL) {
+                        capturedModelURL = nil
+                        appModel.state = .ready
+                    }
                     .environmentObject(appModel)
                     .edgesIgnoringSafeArea(.all)
-            } else if let modelURL = capturedModelURL {
-                ModelView(modelFile: modelURL) {
-                    capturedModelURL = nil
-                    appModel.state = .ready
-                }
-                .environmentObject(appModel)
-                .edgesIgnoringSafeArea(.all)
-            } else if appModel.state == .capturing {
-                if let session = appModel.objectCaptureSession, !sessionInitializing {
-                    // Only show the CapturePrimaryView when session is ready
-                    CapturePrimaryView(session: session)
-                        .environmentObject(appModel)
-                } else {
-                    // Show a loading view while session initializes
-                    VStack {
-                        CircularProgressView()
-                        Text("Initializing camera...")
-                            .font(.headline)
-                            .padding()
+                } else if appModel.state == .capturing {
+                    if let session = appModel.objectCaptureSession, !sessionInitializing {
+                        // Only show the CapturePrimaryView when session is ready
+                        CapturePrimaryView(session: session)
+                            .environmentObject(appModel)
+                    } else {
+                        // Show a loading view while session initializes
+                        VStack {
+                            CircularProgressView()
+                            Text("Initializing camera...")
+                                .font(.headline)
+                                .padding()
+                        }
                     }
+                } else if appModel.state == .reconstructing || appModel.state == .prepareToReconstruct {
+                    // Use our enhanced ProcessingProgressView with title and back button
+                    ProcessingProgressView(progress: appModel.reconstructionProgress)
+                        .environmentObject(appModel)
+                } else if showProgressView {
+                    CircularProgressView()
                 }
-            } else if appModel.state == .reconstructing || appModel.state == .prepareToReconstruct {
-                // Use our enhanced ProcessingProgressView with title and back button
-                ProcessingProgressView(progress: appModel.reconstructionProgress)
-                    .environmentObject(appModel)
-            } else if showProgressView {
-                CircularProgressView()
             }
             
             // Show onboarding view on top if needed
             if onboardingManager.shouldShowOnboarding {
-                OnboardingView(isShowingOnboarding: $onboardingManager.shouldShowOnboarding)
+                OnboardingView(isShowingOnboarding: $onboardingManager.shouldShowOnboarding,
+                              onboardingManager: onboardingManager)
                     .transition(.opacity)
                     .zIndex(100) // Ensure it's on top
             }
@@ -123,6 +132,23 @@ struct ContentView: View {
             message: {}
         )
         .environmentObject(appModel)
+        // Add a debug overlay to reset onboarding
+        .overlay(alignment: .bottomTrailing) {
+            #if DEBUG
+            Button(action: {
+                onboardingManager.resetOnboarding()
+            }) {
+                Image(systemName: "arrow.counterclockwise.circle.fill")
+                    .font(.system(size: 24))
+                    .foregroundColor(.blue)
+                    .padding()
+                    .background(Color.white.opacity(0.7))
+                    .clipShape(Circle())
+                    .shadow(radius: 3)
+            }
+            .padding()
+            #endif
+        }
     }
 }
 

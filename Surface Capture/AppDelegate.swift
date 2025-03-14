@@ -25,7 +25,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             print("Failed to set up audio session: \(error)")
         }
         
-        // First launch check for onboarding
+        // First launch setup for onboarding
         setupFirstLaunchDefaults()
         
         // Create the SwiftUI view that provides the window contents.
@@ -40,22 +40,45 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
     
     private func setupFirstLaunchDefaults() {
-        // Check if this is the first time the app has been launched
+        // Reset previous onboarding key that might be incorrect
+        if isFirstLaunch() {
+            print("First launch detected - setting up defaults")
+            // Reset any previous onboarding keys if they exist
+            UserDefaults.standard.removeObject(forKey: "hasSeenOnboarding")
+        }
+        
         let userDefaults = UserDefaults.standard
         
-        // Only set default values if they haven't been set yet
+        // Safely set up each default value only if not already set
         if userDefaults.object(forKey: "onboardingShownCount") == nil {
             userDefaults.set(0, forKey: "onboardingShownCount")
+            print("Set onboardingShownCount to 0")
         }
         
-        if userDefaults.object(forKey: "hasSeenOnboarding") == nil {
-            userDefaults.set(false, forKey: "hasSeenOnboarding")
+        if userDefaults.object(forKey: "hasCompletedOnboarding") == nil {
+            userDefaults.set(false, forKey: "hasCompletedOnboarding")
+            print("Set hasCompletedOnboarding to false")
         }
         
-        // Define the number of times to show onboarding
         if userDefaults.object(forKey: "maxOnboardingShows") == nil {
             userDefaults.set(10, forKey: "maxOnboardingShows")
+            print("Set maxOnboardingShows to 10")
         }
+        
+        // Output current values for debugging
+        print("Current UserDefaults:")
+        print("- onboardingShownCount: \(userDefaults.integer(forKey: "onboardingShownCount"))")
+        print("- hasCompletedOnboarding: \(userDefaults.bool(forKey: "hasCompletedOnboarding"))")
+        print("- maxOnboardingShows: \(userDefaults.integer(forKey: "maxOnboardingShows"))")
+    }
+    
+    private func isFirstLaunch() -> Bool {
+        let hasLaunchedBefore = UserDefaults.standard.bool(forKey: "hasLaunchedBefore")
+        if !hasLaunchedBefore {
+            UserDefaults.standard.set(true, forKey: "hasLaunchedBefore")
+            return true
+        }
+        return false
     }
 
     func applicationWillResignActive(_ application: UIApplication) {

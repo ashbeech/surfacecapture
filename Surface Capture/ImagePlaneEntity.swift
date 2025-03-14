@@ -42,7 +42,8 @@ class ImagePlaneEntity {
                 
                 // Important: Get the current opacity to preserve it
                 let opacity: Float
-                if let component = entity.components[OpacityComponent.self] as? OpacityComponent {
+                //if let component = entity.components[OpacityComponent.self] as? OpacityComponent {
+                if let component = entity.components[OpacityComponent.self] {
                     opacity = component.currentOpacity
                 } else {
                     opacity = Float(initialAlpha)
@@ -91,7 +92,8 @@ class ImagePlaneEntity {
                 
                 // Preserve current opacity
                 let currentOpacity: Float
-                if let component = entity.components[OpacityComponent.self] as? OpacityComponent {
+                //if let component = entity.components[OpacityComponent.self] as? OpacityComponent {
+                if let component = entity.components[OpacityComponent.self] {
                     currentOpacity = component.currentOpacity
                 } else {
                     currentOpacity = 0.1

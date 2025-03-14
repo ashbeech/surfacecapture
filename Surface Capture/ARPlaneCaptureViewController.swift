@@ -928,21 +928,7 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
                 modelEntity.transform.rotation = newRotation
                 
             case .rotatingZ:
-                // For Z rotation, we'll implement a more natural control by using a rotation around the center
-                // Calculate the center of the view
-                let centerX = arView.bounds.width / 2
-                let centerY = arView.bounds.height / 2
-                
-                // Calculate vectors from center to current and previous positions
-                let previousVector = CGPoint(x: lastLocation.x - centerX, y: lastLocation.y - centerY)
-                let currentVector = CGPoint(x: location.x - centerX, y: location.y - centerY)
-                
-                // Calculate the angle between these vectors (in radians)
-                let angle1 = atan2(previousVector.y, previousVector.x)
-                let angle2 = atan2(currentVector.y, currentVector.x)
-                
-                // Apply the rotation
-                //let rotation = Float(angleChange) * 0.5 // Scale factor to make rotation feel natural
+                // For Z rotation, use horizontal movement (deltaX) directly
                 let rotation = deltaX * 0.01
                 let newRotation = modelManipulator.updateRotation(delta: rotation, for: .rotatingZ)
                 modelEntity.transform.rotation = newRotation
