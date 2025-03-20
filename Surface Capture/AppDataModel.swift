@@ -53,6 +53,9 @@ class AppDataModel: ObservableObject, Identifiable {
     @Published var selectedModelEntity: ModelEntity?
     var arViewController: ARPlaneCaptureViewController?
 
+    // Last state before pause, to restore after resuming
+    private var objectCaptureSessionStateBeforePause: ObjectCaptureSession.CaptureState?
+    
     @Published var captureQualityMetrics = CaptureQualityMetrics()
     @Published var captureQualityStatus: CaptureQualityStatus = .good
     @Published var objectCaptureSession: ObjectCaptureSession? {

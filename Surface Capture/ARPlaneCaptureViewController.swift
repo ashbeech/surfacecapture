@@ -9,6 +9,7 @@ import ARKit
 import Combine
 import ModelIO
 
+
 class ARPlaneCaptureViewController: UIViewController, ObservableObject {
     
     private var arView: ARView!
@@ -38,36 +39,25 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         static var streamingHostingControllerKey = UnsafeRawPointer(bitPattern: "streamingHostingControllerKey".hashValue)!
     }
     
-    // Streaming service with lazy initialization to avoid creating it unnecessarily
-    var streamingService: ARStreamingService {
-        get {
-            // Use the void pointer directly
-            if let existingService = objc_getAssociatedObject(self, AssociatedKeys.streamingServiceKey) as? ARStreamingService {
-                return existingService
-            }
-            
-            // Create new service if none exists
-            let service = ARStreamingService()
-            
-            // Set up callbacks
-            service.onReceivedTransform = { [weak self] transform in
-                self?.applyReceivedTransform(transform)
-            }
-            
-            service.onReceivedWorldMap = { [weak self] worldMap in
-                self?.applyReceivedWorldMap(worldMap)
-            }
-            
-            // Store using associated object (safe way to avoid strong reference cycles)
-            objc_setAssociatedObject(
-                self,
-                AssociatedKeys.streamingServiceKey,
-                service,
-                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
-            )
-            
-            return service
+    // Create and get the WebRTC service instance
+    var webRTCService: WebRTCService {
+        // Check if there's an existing service
+        if let existingService = objc_getAssociatedObject(self, &StreamingKeys.webRTCServiceKey) as? WebRTCService {
+            return existingService
         }
+        
+        // Create a new service if none exists
+        let service = WebRTCService()
+        
+        // Store using associated object
+        objc_setAssociatedObject(
+            self,
+            &StreamingKeys.webRTCServiceKey,
+            service,
+            .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+        )
+        
+        return service
     }
     
     var mode: CaptureType = .objectCapture
@@ -1049,7 +1039,62 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
     }
     
     func pauseARSession() {
-        arView?.session.pause()
+        print("Pausing AR session to free resources for streaming")
+        
+        // Pause the AR session
+        if let arView = arView {
+            arView.session.pause()
+            arView.session.delegate = nil
+        }
+        
+        /*
+        // Clean up any resource-intensive processes
+        if videoCapturer != nil {
+            videoCapturer?.stopCapture(completionHandler: {
+                print("Camera capture stopped for AR view")
+            })
+            videoCapturer = nil
+        }
+        */
+        
+        // Clear any intensive rendering or processing
+        if let arView = arView {
+            arView.renderOptions = [
+                .disableCameraGrain,
+                .disableMotionBlur,
+                .disableDepthOfField,
+                .disableFaceMesh,
+                .disablePersonOcclusion,
+                .disableGroundingShadows,
+                .disableAREnvironmentLighting,
+                .disableHDR
+            ]
+            
+            // Remove all animations and rendering subscriptions
+            arView.scene.subscribe(to: SceneEvents.Update.self) { _ in }.cancel()
+        }
+    }
+
+    // Method to resume the AR session
+    func resumeARSession() {
+        print("Resuming AR session")
+        
+        guard let arView = arView else { return }
+        
+        // Create a new configuration that matches what we were using before
+        let configuration = ARWorldTrackingConfiguration()
+        configuration.planeDetection = [.horizontal, .vertical]
+        
+        // Enable scene reconstruction if supported
+        if ARWorldTrackingConfiguration.supportsSceneReconstruction(.mesh) {
+            configuration.sceneReconstruction = .mesh
+        }
+        
+        // Run the session again
+        arView.session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
+        
+        // Show temporary message
+        showTemporaryMessage("AR Session Resumed")
     }
     
     private func extractSnapshotID(from url: URL) throws -> String? {
@@ -1236,49 +1281,9 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         // Force UI update
         objectWillChange.send()
     }
-    
-    func toggleStreamMode() {
-        isStreamingActive.toggle()
-        
-        if isStreamingActive {
-            showStreamingInterface()
-        } else {
-            stopStreaming()
-            hideStreamingInterface()
-        }
-    }
-    
-    private func showStreamingInterface() {
-        let service = streamingService
-        
-        // Create hosting controller for the streaming interface
-        let streamingView = StreamingView(streamingService: service)
-        let hostingController = UIHostingController(rootView: streamingView)
-        
-        // Keep reference to the hosting controller to prevent it from being deallocated
-        objc_setAssociatedObject(
-            self,
-            &AssociatedKeys.streamingHostingControllerKey,
-            hostingController,
-            .OBJC_ASSOCIATION_RETAIN_NONATOMIC
-        )
-        
-        // Add as child view controller
-        addChild(hostingController)
-        
-        hostingController.view.frame = view.bounds
-        hostingController.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        hostingController.view.backgroundColor = UIColor.systemBackground.withAlphaComponent(0.9)
-        view.addSubview(hostingController.view)
-        
-        // Animate in
-        hostingController.view.alpha = 0
-        UIView.animate(withDuration: 0.3) {
-            hostingController.view.alpha = 1
-        }
-        
-        hostingController.didMove(toParent: self)
-    }
+
+    // Add this property to store UI state
+    private var previousUIState: (isModelSelected: Bool, isWorkModeActive: Bool)?
     
     private func hideStreamingInterface() {
         guard let hostingController = objc_getAssociatedObject(self, &AssociatedKeys.streamingHostingControllerKey) as? UIHostingController<StreamingView> else {
@@ -1311,40 +1316,235 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
             return
         }
         
-        // Ensure model is placed and selected
-        guard isModelPlaced, let modelEntity = capturedPlaneModel else {
-            showToast(message: "Place a model before streaming")
-            return
-        }
+        // Completely stop and release AR session
+        arView.session.pause()
+        arView.session.delegate = nil
         
-        // Start streaming in host mode
-        streamingService.startHosting()
-        
-        // Small delay to ensure connection is ready
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+        // Explicitly request camera permissions
+        AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
             guard let self = self else { return }
             
-            // Start the AR streaming
-            self.streamingService.startStreaming(arView: arView, modelEntity: modelEntity)
-            
-            // Show UI indicator for streaming
-            self.showStreamingStatusIndicator()
-            
-            // Lock interface elements during streaming
-            self.lockInterfaceDuringStreaming(true)
+            DispatchQueue.main.async {
+                if granted {
+                    // Ensure camera is fully released
+                    self.configureDeviceCameraForStreaming()
+                    
+                    // Add more comprehensive logging
+                    print("🔴 Starting WebRTC Streaming")
+                    print("Camera Access: Granted")
+                    
+                    // Now start hosting WebRTC session
+                    self.webRTCService.startHosting(withDirectCameraAccess: true)
+                    
+                    // Update UI
+                    self.isStreamingActive = true
+                    self.showStreamingStatusOverlay(message: "Streaming Active")
+                    self.objectWillChange.send()
+                } else {
+                    print("🚫 Camera Access Denied")
+                    self.showStreamingStatusOverlay(message: "Camera Access Denied")
+                }
+            }
         }
     }
     
+    private func configureDeviceCameraForStreaming() {
+        // Comprehensive camera configuration
+        let session = AVCaptureSession()
+        session.beginConfiguration()
+        
+        do {
+            // Find the best back camera
+            guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
+                  let input = try? AVCaptureDeviceInput(device: camera) else {
+                print("🚨 ERROR: No back camera available")
+                return
+            }
+            
+            // Configure session
+            session.addInput(input)
+            session.commitConfiguration()
+            
+            print("🎥 Camera Configuration:")
+            print("  Device: \(camera.localizedName)")
+            print("  Position: \(camera.position)")
+           // print("  Supports multiple capture streams: \(camera.supportsMultipleCaptureSources)")
+            
+            // Optional: Start a minimal capture to validate camera
+            let videoOutput = AVCaptureVideoDataOutput()
+            videoOutput.setSampleBufferDelegate(self, queue: DispatchQueue(label: "camera_preview_queue"))
+            
+            if session.canAddOutput(videoOutput) {
+                session.addOutput(videoOutput)
+                print("✅ Added video output successfully")
+            } else {
+                print("❌ Could not add video output")
+            }
+        }
+    }
+    
+    // Stop streaming session
     func stopStreaming() {
-        // Stop streaming service
-        streamingService.stopStreaming()
-        streamingService.disconnect()
+        // Disconnect WebRTC session first
+        webRTCService.disconnect()
         
-        // Remove UI indicators
-        removeStreamingStatusIndicator()
+        // Reset streaming state
+        isStreamingActive = false
         
-        // Unlock interface
-        lockInterfaceDuringStreaming(false)
+        // Hide status overlay
+        hideStreamingStatusOverlay()
+        
+        // Restart the AR session
+        restartARSession()
+        
+        // Force UI update
+        objectWillChange.send()
+    }
+    
+    // Toggle streaming state
+    func toggleStreamMode() {
+        if isStreamingActive {
+            stopStreaming()
+        } else {
+            startStreaming()
+        }
+    }
+    
+    func restartARSession() {
+        guard let arView = arView else { return }
+        
+        // Create a configuration that matches what you were using before
+        let configuration = ARWorldTrackingConfiguration()
+        configuration.planeDetection = [.horizontal, .vertical]
+        
+        // Run the session again
+        arView.session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
+        
+        // Show temporary message
+        showTemporaryMessage("AR Session Restarted")
+    }
+
+    func showTemporaryMessage(_ message: String) {
+        // Add a temporary message to the view
+        let messageLabel = UILabel()
+        messageLabel.text = message
+        messageLabel.textAlignment = .center
+        messageLabel.textColor = .white
+        messageLabel.backgroundColor = UIColor.black.withAlphaComponent(0.7)
+        messageLabel.layer.cornerRadius = 10
+        messageLabel.clipsToBounds = true
+        //messageLabel.padding = UIEdgeInsets(top: 8, left: 16, bottom: 8, right: 16)
+        messageLabel.font = UIFont.systemFont(ofSize: 16, weight: .medium)
+        
+        // Add to view
+        messageLabel.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(messageLabel)
+        
+        NSLayoutConstraint.activate([
+            messageLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            messageLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 20),
+        ])
+        
+        // Fade out after delay
+        UIView.animate(withDuration: 0.5, delay: 2.0, options: [], animations: {
+            messageLabel.alpha = 0
+        }, completion: { _ in
+            messageLabel.removeFromSuperview()
+        })
+    }
+    
+    // Show streaming status overlay
+    func showStreamingStatusOverlay(message: String = "") {
+        // Create SwiftUI overlay with hosting statistics
+        let hostingViewController = UIHostingController(
+            rootView: StreamingHostOverlay(
+                webRTCService: webRTCService,
+                onToggleStreaming: { [weak self] in
+                    self?.toggleStreamMode()
+                },
+                statusMessage: message
+            )
+        )
+        
+        // Make background transparent
+        hostingViewController.view.backgroundColor = .clear
+        
+        // Save reference to prevent deallocation
+        objc_setAssociatedObject(
+            self,
+            &StreamingKeys.overlayHostingControllerKey,
+            hostingViewController,
+            .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+        )
+        
+        // Add as child view controller
+        addChild(hostingViewController)
+        
+        // Configure view
+        hostingViewController.view.frame = view.bounds
+        hostingViewController.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        
+        // Add to view hierarchy
+        view.addSubview(hostingViewController.view)
+        
+        // Complete child view controller addition
+        hostingViewController.didMove(toParent: self)
+    }
+    
+    // Update overlay with new message
+    func updateStreamingStatusOverlay(message: String) {
+        // Get hosting controller
+        guard let hostingController = objc_getAssociatedObject(
+            self,
+            &StreamingKeys.overlayHostingControllerKey
+        ) as? UIHostingController<StreamingHostOverlay> else {
+            // If no existing overlay, create one
+            showStreamingStatusOverlay(message: message)
+            return
+        }
+        
+        // Update the message by creating a new overlay view
+        // (SwiftUI views are immutable, so we have to replace it)
+        let updatedOverlay = StreamingHostOverlay(
+            webRTCService: webRTCService,
+            onToggleStreaming: { [weak self] in
+                self?.toggleStreamMode()
+            },
+            statusMessage: message
+        )
+        
+        // Replace the view's rootView
+        hostingController.rootView = updatedOverlay
+    }
+    
+    // Hide streaming status overlay
+    func hideStreamingStatusOverlay() {
+        // Get hosting controller
+        guard let hostingController = objc_getAssociatedObject(
+            self,
+            &StreamingKeys.overlayHostingControllerKey
+        ) as? UIHostingController<StreamingHostOverlay> else {
+            return
+        }
+        
+        // Remove from parent
+        hostingController.willMove(toParent: nil)
+        hostingController.view.removeFromSuperview()
+        hostingController.removeFromParent()
+        
+        // Clear reference
+        objc_setAssociatedObject(
+            self,
+            &StreamingKeys.overlayHostingControllerKey,
+            nil,
+            .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+        )
+    }
+    
+    // Keys for associated objects
+    struct StreamingKeys {
+        static var webRTCServiceKey = "webRTCServiceKey"
+        static var overlayHostingControllerKey = "overlayHostingControllerKey"
     }
     
     // MARK: - Receiver Mode Methods
@@ -1373,75 +1573,7 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         
         showToast(message: "Received AR world map from host")
     }
-    
-    // MARK: - UI Helpers
-    
-    private func showStreamingStatusIndicator() {
-        // Create a visual indicator for active streaming
-        let indicator = UILabel()
-        indicator.text = "AR Streaming Active"
-        indicator.textAlignment = .center
-        indicator.textColor = .white
-        indicator.backgroundColor = UIColor.systemBlue.withAlphaComponent(0.8)
-        indicator.layer.cornerRadius = 10
-        indicator.clipsToBounds = true
-        indicator.tag = 1001 // Tag for identification
-        
-        // Add to view
-        indicator.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(indicator)
-        
-        NSLayoutConstraint.activate([
-            indicator.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 100),
-            indicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            indicator.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, multiplier: 0.8),
-            indicator.heightAnchor.constraint(equalToConstant: 40)
-        ])
-        
-        // Add pulsing animation
-        UIView.animate(withDuration: 1.5, delay: 0, options: [.repeat, .autoreverse, .allowUserInteraction], animations: {
-            indicator.alpha = 0.6
-        })
-    }
-    
-    private func removeStreamingStatusIndicator() {
-        // Remove streaming indicator if it exists
-        if let indicator = view.viewWithTag(1001) {
-            UIView.animate(withDuration: 0.3, animations: {
-                indicator.alpha = 0
-            }) { _ in
-                indicator.removeFromSuperview()
-            }
-        }
-    }
-    
-    private func lockInterfaceDuringStreaming(_ lock: Bool) {
-        // When streaming, lock certain interface elements to prevent changes
-        if lock {
-            // Store current state
-            previousLockedRotation = lockedRotation
-            previousLockedPosition = lockedPosition
-            previousLockedScale = lockedScale
-            
-            // Lock all manipulations during streaming
-            lockedRotation = true
-            lockedPosition = true
-            lockedScale = true
-            
-            // Disable other functionality during streaming
-            isModelSelected = false
-            updateModelHighlight(isSelected: false)
-        } else {
-            // Restore previous state
-            lockedRotation = previousLockedRotation
-            lockedPosition = previousLockedPosition
-            lockedScale = previousLockedScale
-        }
-        
-        // Force UI update
-        objectWillChange.send()
-    }
-    
+
 }
 
 extension ARPlaneCaptureViewController: UIGestureRecognizerDelegate {
@@ -1451,10 +1583,13 @@ extension ARPlaneCaptureViewController: UIGestureRecognizerDelegate {
     }
 }
 
-#if DEBUG
-struct ARStreamingView_Previews: PreviewProvider {
-    static var previews: some View {
-        StreamingView(streamingService: ARStreamingService())
+extension ARPlaneCaptureViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
+    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        // This method confirms camera is actually capturing
+        print("🎥 Camera Captured Sample Buffer")
+    }
+    
+    func captureOutput(_ output: AVCaptureOutput, didDrop sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        print("⚠️ Camera Dropped Sample Buffer")
     }
 }
-#endif

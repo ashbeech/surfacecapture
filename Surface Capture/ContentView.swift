@@ -43,7 +43,7 @@ struct ContentView: View {
                 } else if appModel.state == .capturing {
                     if let session = appModel.objectCaptureSession, !sessionInitializing {
                         // Only show the CapturePrimaryView when session is ready
-                        CapturePrimaryView(session: session)
+                        CapturePrimaryView(session: session, onboardingManager: onboardingManager)
                             .environmentObject(appModel)
                     } else {
                         // Show a loading view while session initializes
@@ -66,9 +66,9 @@ struct ContentView: View {
             // Show onboarding view on top if needed
             if onboardingManager.shouldShowOnboarding {
                 OnboardingView(isShowingOnboarding: $onboardingManager.shouldShowOnboarding,
-                              onboardingManager: onboardingManager)
-                    .transition(.opacity)
-                    .zIndex(100) // Ensure it's on top
+                               onboardingManager: onboardingManager)
+                .transition(.opacity)
+                .zIndex(100) // Ensure it's on top
             }
         }
         .onChange(of: appModel.state) { _, newState in
@@ -132,23 +132,6 @@ struct ContentView: View {
             message: {}
         )
         .environmentObject(appModel)
-        // Add a debug overlay to reset onboarding
-        .overlay(alignment: .bottomTrailing) {
-            #if DEBUG
-            Button(action: {
-                onboardingManager.resetOnboarding()
-            }) {
-                Image(systemName: "arrow.counterclockwise.circle.fill")
-                    .font(.system(size: 24))
-                    .foregroundColor(.blue)
-                    .padding()
-                    .background(Color.white.opacity(0.7))
-                    .clipShape(Circle())
-                    .shadow(radius: 3)
-            }
-            .padding()
-            #endif
-        }
     }
 }
 
@@ -280,23 +263,6 @@ private struct CircularProgressView: View {
                 Spacer()
             }
             Spacer()
-        }
-    }
-}
-
-// Helper for showing onboarding from anywhere in the app
-extension View {
-    func withOnboardingReset(_ onboardingManager: OnboardingManager) -> some View {
-        self.toolbar {
-            #if DEBUG
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: {
-                    onboardingManager.resetOnboarding()
-                }) {
-                    Image(systemName: "info.circle")
-                }
-            }
-            #endif
         }
     }
 }

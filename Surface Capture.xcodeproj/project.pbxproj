@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		AA0044912986F72313CDEE9D /* Pods_Surface_Capture.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A5FC7E7C69836D2AC031DF5D /* Pods_Surface_Capture.framework */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		5E2BC86B2D2824A700C7F6EF /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -27,6 +31,9 @@
 		5E2BC85A2D2824A500C7F6EF /* Surface Capture.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Surface Capture.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		5E2BC86A2D2824A700C7F6EF /* Surface CaptureTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Surface CaptureTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		5E2BC8742D2824A700C7F6EF /* Surface CaptureUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Surface CaptureUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A5FC7E7C69836D2AC031DF5D /* Pods_Surface_Capture.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Surface_Capture.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		A722A8B7836F51EB75CBBD87 /* Pods-Surface Capture.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Surface Capture.release.xcconfig"; path = "Target Support Files/Pods-Surface Capture/Pods-Surface Capture.release.xcconfig"; sourceTree = "<group>"; };
+		D7B97870F2C53C108543FDC2 /* Pods-Surface Capture.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Surface Capture.debug.xcconfig"; path = "Target Support Files/Pods-Surface Capture/Pods-Surface Capture.debug.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -52,6 +59,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AA0044912986F72313CDEE9D /* Pods_Surface_Capture.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -72,6 +80,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		000A017C81AA5E3B34EC6908 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				A5FC7E7C69836D2AC031DF5D /* Pods_Surface_Capture.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		5E2BC8512D2824A500C7F6EF = {
 			isa = PBXGroup;
 			children = (
@@ -79,6 +95,8 @@
 				5E2BC86D2D2824A700C7F6EF /* Surface CaptureTests */,
 				5E2BC8772D2824A700C7F6EF /* Surface CaptureUITests */,
 				5E2BC85B2D2824A500C7F6EF /* Products */,
+				8F8B32707C811B266B9E9014 /* Pods */,
+				000A017C81AA5E3B34EC6908 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -92,6 +110,15 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		8F8B32707C811B266B9E9014 /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				D7B97870F2C53C108543FDC2 /* Pods-Surface Capture.debug.xcconfig */,
+				A722A8B7836F51EB75CBBD87 /* Pods-Surface Capture.release.xcconfig */,
+			);
+			path = Pods;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -99,9 +126,11 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 5E2BC87E2D2824A700C7F6EF /* Build configuration list for PBXNativeTarget "Surface Capture" */;
 			buildPhases = (
+				7DD3E3A547E2EF30C43D0834 /* [CP] Check Pods Manifest.lock */,
 				5E2BC8562D2824A500C7F6EF /* Sources */,
 				5E2BC8572D2824A500C7F6EF /* Frameworks */,
 				5E2BC8582D2824A500C7F6EF /* Resources */,
+				88701638E3AC790E3667F884 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -111,8 +140,6 @@
 				5E2BC85C2D2824A500C7F6EF /* Surface Capture */,
 			);
 			name = "Surface Capture";
-			packageProductDependencies = (
-			);
 			productName = "Surface Capture";
 			productReference = 5E2BC85A2D2824A500C7F6EF /* Surface Capture.app */;
 			productType = "com.apple.product-type.application";
@@ -134,8 +161,6 @@
 				5E2BC86D2D2824A700C7F6EF /* Surface CaptureTests */,
 			);
 			name = "Surface CaptureTests";
-			packageProductDependencies = (
-			);
 			productName = "Surface CaptureTests";
 			productReference = 5E2BC86A2D2824A700C7F6EF /* Surface CaptureTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -157,8 +182,6 @@
 				5E2BC8772D2824A700C7F6EF /* Surface CaptureUITests */,
 			);
 			name = "Surface CaptureUITests";
-			packageProductDependencies = (
-			);
 			productName = "Surface CaptureUITests";
 			productReference = 5E2BC8742D2824A700C7F6EF /* Surface CaptureUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
@@ -230,6 +253,48 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		7DD3E3A547E2EF30C43D0834 /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-Surface Capture-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+		88701638E3AC790E3667F884 /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-Surface Capture/Pods-Surface Capture-frameworks-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-Surface Capture/Pods-Surface Capture-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Surface Capture/Pods-Surface Capture-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		5E2BC8562D2824A500C7F6EF /* Sources */ = {
@@ -306,7 +371,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -369,7 +434,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -390,6 +455,7 @@
 		};
 		5E2BC87F2D2824A700C7F6EF /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = D7B97870F2C53C108543FDC2 /* Pods-Surface Capture.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -399,6 +465,7 @@
 				DEVELOPMENT_TEAM = J5V4NZ3334;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Surface-Capture-Info.plist";
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access for AR features";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -421,6 +488,7 @@
 		};
 		5E2BC8802D2824A700C7F6EF /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = A722A8B7836F51EB75CBBD87 /* Pods-Surface Capture.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -430,6 +498,7 @@
 				DEVELOPMENT_TEAM = J5V4NZ3334;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Surface-Capture-Info.plist";
 				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access for AR features";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

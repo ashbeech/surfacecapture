@@ -428,6 +428,9 @@ struct CapturePrimaryView: View {
     @EnvironmentObject var appModel: AppDataModel
     var session: ObjectCaptureSession
     
+    // User help
+    @ObservedObject var onboardingManager: OnboardingManager
+    
     // Session state
     @State private var showInfo: Bool = false
     @State private var isCapturing = false
@@ -444,7 +447,7 @@ struct CapturePrimaryView: View {
     // Image picker state
     @State private var isImagePickerPresented: Bool = false
     @State private var isInImagePickerFlow: Bool = false
-
+    
     // Image count tracking
     @State private var capturedImageCount: Int = 0
     @State private var imageCountTimer: Timer?
@@ -543,13 +546,21 @@ struct CapturePrimaryView: View {
                         // Bottom controls with fixed position
                         enhancedControlsOverlay
                     }
-                /*
-                    .overlay(alignment: .center) {
-                        if isInitializing {
-                            InitializationView(error: initializationError)
+                    .overlay(alignment: .topTrailing) {
+                        // Help button
+                        Button(action: {
+                            onboardingManager.resetOnboarding()
+                        }) {
+                            Image(systemName: "questionmark.circle")
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundColor(.white)
+                                .frame(width: 40, height: 40)
                         }
+                        .background(Color.black.opacity(0.7))
+                        .clipShape(Circle())
+                        .padding(.trailing, 20)
+                        .padding(.top, 0)
                     }
-                 */
             } else {
                 // Show loading view while session initializes
                 VStack {
@@ -840,7 +851,7 @@ struct CapturePrimaryView: View {
     var enhancedControlsOverlay: some View {
         VStack(spacing: 20) {
             ZStack {
-                // Initial state with Image button
+                // Initial state with Image button and Join button
                 if !isCapturing {
                     HStack {
                         // Image Picker Button
@@ -852,8 +863,8 @@ struct CapturePrimaryView: View {
                             HStack {
                                 Image(systemName: "photo.fill")
                                 Text("Add Image")
-                                .font(.headline)
-                                .foregroundColor(.white)
+                                    .font(.headline)
+                                    .foregroundColor(.white)
                             }
                             .foregroundColor(.white)
                             .padding()
@@ -874,6 +885,10 @@ struct CapturePrimaryView: View {
                             }
                         )
                         .frame(width: 180)
+                        
+                        // Join Streaming Button
+                        StreamingJoinButton()
+                            .padding(.horizontal, 4)
                     }
                     .transition(.opacity)
                 }
@@ -911,6 +926,109 @@ struct CapturePrimaryView: View {
         }
         .padding(.bottom, 33)
     }
+    
+    // Streaming Join Button specifically for the CapturePrimaryView
+    @available(iOS 17.0, *)
+    struct StreamingJoinButton: View {
+        @StateObject private var webRTCService = WebRTCService()
+        @State private var showStreamingView = false
+        @EnvironmentObject var appModel: AppDataModel
+        
+        var body: some View {
+            Button(action: {
+                // Show the streaming view
+                showStreamingView = true
+                /*
+                if appModel.objectCaptureSession != nil {
+                    appModel.objectCaptureSession?.cancel()
+                    appModel.objectCaptureSession = nil
+                }
+                 */
+            }) {
+                HStack {
+                    Image(systemName: "wifi")
+                        .font(.system(size: 16))
+                    Text("Join")
+                        .font(.headline)
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Capsule().fill(Color.purple))
+            }
+            .fullScreenCover(isPresented: $showStreamingView) {
+                // Present the streaming view as a full-screen cover
+                StreamingView(webRTCService: webRTCService) {
+                    // Dismiss action
+                    showStreamingView = false
+                }
+            }
+        }
+    }
+    /*
+    struct StreamingJoinButton: View {
+        @StateObject private var webRTCService = WebRTCService()
+        @State private var showStreamingView = false
+        @State private var isConnecting = false
+        
+        // Add access to app model - using environment object
+        @EnvironmentObject var appModel: AppDataModel
+        
+        var body: some View {
+            Button(action: {
+                // Show loading indicator
+                isConnecting = true
+                
+                // Pause any active ObjectCaptureSession
+                if appModel.objectCaptureSession != nil {
+                    appModel.objectCaptureSession?.cancel()
+                    appModel.objectCaptureSession = nil
+                }
+                
+                // Prepare WebRTC service
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0) {
+                    // Show the streaming view
+                    showStreamingView = true
+                    isConnecting = false
+                }
+            }) {
+                HStack {
+                    if isConnecting {
+                        // Show activity indicator when connecting
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(0.8)
+                    } else {
+                        Image(systemName: "wifi")
+                            .font(.system(size: 16))
+                    }
+                    
+                    Text(isConnecting ? "Connecting..." : "Join")
+                        .font(.headline)
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Capsule().fill(Color.purple))
+            }
+            .disabled(isConnecting)
+            .fullScreenCover(isPresented: $showStreamingView, onDismiss: {
+                // Resume ObjectCaptureSession when streaming view is dismissed
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    appModel.state = .restart
+                }
+            }) {
+                // Present the streaming view as a full-screen cover
+                StreamingView(webRTCService: webRTCService) {
+                    // Disconnect and reset when dismissing
+                    webRTCService.disconnect()
+                    
+                    // Dismiss action
+                    showStreamingView = false
+                }
+            }
+        }
+    }*/
     
     // MARK: - Setup Tracking Updates
     
