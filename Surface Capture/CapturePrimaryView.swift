@@ -930,20 +930,16 @@ struct CapturePrimaryView: View {
     // Streaming Join Button specifically for the CapturePrimaryView
     @available(iOS 17.0, *)
     struct StreamingJoinButton: View {
-        @StateObject private var webRTCService = WebRTCService()
         @State private var showStreamingView = false
         @EnvironmentObject var appModel: AppDataModel
         
         var body: some View {
             Button(action: {
+                // Gracefully end the object capture session without triggering errors
+                cleanlyEndObjectCaptureSession()
+                
                 // Show the streaming view
                 showStreamingView = true
-                /*
-                if appModel.objectCaptureSession != nil {
-                    appModel.objectCaptureSession?.cancel()
-                    appModel.objectCaptureSession = nil
-                }
-                 */
             }) {
                 HStack {
                     Image(systemName: "wifi")
@@ -956,79 +952,59 @@ struct CapturePrimaryView: View {
                 .padding(.vertical, 12)
                 .background(Capsule().fill(Color.purple))
             }
-            .fullScreenCover(isPresented: $showStreamingView) {
-                // Present the streaming view as a full-screen cover
-                StreamingView(webRTCService: webRTCService) {
-                    // Dismiss action
-                    showStreamingView = false
-                }
-            }
-        }
-    }
-    /*
-    struct StreamingJoinButton: View {
-        @StateObject private var webRTCService = WebRTCService()
-        @State private var showStreamingView = false
-        @State private var isConnecting = false
-        
-        // Add access to app model - using environment object
-        @EnvironmentObject var appModel: AppDataModel
-        
-        var body: some View {
-            Button(action: {
-                // Show loading indicator
-                isConnecting = true
-                
-                // Pause any active ObjectCaptureSession
-                if appModel.objectCaptureSession != nil {
-                    appModel.objectCaptureSession?.cancel()
-                    appModel.objectCaptureSession = nil
-                }
-                
-                // Prepare WebRTC service
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0) {
-                    // Show the streaming view
-                    showStreamingView = true
-                    isConnecting = false
-                }
-            }) {
-                HStack {
-                    if isConnecting {
-                        // Show activity indicator when connecting
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .scaleEffect(0.8)
-                    } else {
-                        Image(systemName: "wifi")
-                            .font(.system(size: 16))
-                    }
-                    
-                    Text(isConnecting ? "Connecting..." : "Join")
-                        .font(.headline)
-                }
-                .foregroundColor(.white)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(Capsule().fill(Color.purple))
-            }
-            .disabled(isConnecting)
             .fullScreenCover(isPresented: $showStreamingView, onDismiss: {
                 // Resume ObjectCaptureSession when streaming view is dismissed
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     appModel.state = .restart
                 }
             }) {
-                // Present the streaming view as a full-screen cover
-                StreamingView(webRTCService: webRTCService) {
-                    // Disconnect and reset when dismissing
-                    webRTCService.disconnect()
-                    
-                    // Dismiss action
+                // Present the JoinView as a full-screen cover
+                JoinView(onClose: {
+                    // This handles when the user explicitly closes the JoinView
                     showStreamingView = false
-                }
+                })
             }
         }
-    }*/
+        
+        // Helper function to gracefully end the ObjectCaptureSession without errors
+        private func cleanlyEndObjectCaptureSession() {
+            
+            
+            // TODO: SO we are cancelling object capture session on tap of join, but this triggers series of events that will dismiss JoinView.
+            // What should happen is we cancel object capture session on tap of join, but this should allow app to enter new state that is
+            // designed to handle joining a stream; so elegantly cancel OCS, and allow to reset return on close of JoinView.
+            
+            // First, remember the current state
+            let currentState = appModel.state
+            
+            // If we're capturing, temporarily set a transitional state to prevent error handling
+            if currentState == .capturing {
+                // Set to a neutral state first
+                appModel.state = .ready
+            }
+            
+            // Check if there's an active session and cancel it
+            if let session = appModel.objectCaptureSession {
+                // Cancel the session
+                session.cancel()
+                
+                // Clear the reference to prevent further callbacks
+                DispatchQueue.main.async {
+                    if appModel.objectCaptureSession === session {
+                        // Only nil out if it's still the same session
+                        // This prevents race conditions
+                        appModel.objectCaptureSession = nil
+                    }
+                }
+            }
+            
+            // Force a restart later to ensure clean state
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                appModel.state = .restart
+            }
+        }
+    }
+
     
     // MARK: - Setup Tracking Updates
     

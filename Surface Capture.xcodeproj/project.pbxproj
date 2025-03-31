@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		5E0007A92D98242F008926CA /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 5E0007A82D98242F008926CA /* WebRTC */; };
 		AA0044912986F72313CDEE9D /* Pods_Surface_Capture.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A5FC7E7C69836D2AC031DF5D /* Pods_Surface_Capture.framework */; };
 /* End PBXBuildFile section */
 
@@ -39,16 +40,22 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		5E2BC85C2D2824A500C7F6EF /* Surface Capture */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = "Surface Capture";
 			sourceTree = "<group>";
 		};
 		5E2BC86D2D2824A700C7F6EF /* Surface CaptureTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = "Surface CaptureTests";
 			sourceTree = "<group>";
 		};
 		5E2BC8772D2824A700C7F6EF /* Surface CaptureUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = "Surface CaptureUITests";
 			sourceTree = "<group>";
 		};
@@ -60,6 +67,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA0044912986F72313CDEE9D /* Pods_Surface_Capture.framework in Frameworks */,
+				5E0007A92D98242F008926CA /* WebRTC in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -130,7 +138,6 @@
 				5E2BC8562D2824A500C7F6EF /* Sources */,
 				5E2BC8572D2824A500C7F6EF /* Frameworks */,
 				5E2BC8582D2824A500C7F6EF /* Resources */,
-				88701638E3AC790E3667F884 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -218,6 +225,9 @@
 			);
 			mainGroup = 5E2BC8512D2824A500C7F6EF;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				5E0007A72D98242F008926CA /* XCRemoteSwiftPackageReference "WebRTC" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 5E2BC85B2D2824A500C7F6EF /* Products */;
 			projectDirPath = "";
@@ -275,23 +285,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
-			showEnvVarsInLog = 0;
-		};
-		88701638E3AC790E3667F884 /* [CP] Embed Pods Frameworks */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-Surface Capture/Pods-Surface Capture-frameworks-${CONFIGURATION}-input-files.xcfilelist",
-			);
-			name = "[CP] Embed Pods Frameworks";
-			outputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-Surface Capture/Pods-Surface Capture-frameworks-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-Surface Capture/Pods-Surface Capture-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
 /* End PBXShellScriptBuildPhase section */
@@ -631,6 +624,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		5E0007A72D98242F008926CA /* XCRemoteSwiftPackageReference "WebRTC" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/stasel/WebRTC.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 134.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		5E0007A82D98242F008926CA /* WebRTC */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5E0007A72D98242F008926CA /* XCRemoteSwiftPackageReference "WebRTC" */;
+			productName = WebRTC;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 5E2BC8522D2824A500C7F6EF /* Project object */;
 }

@@ -15,12 +15,15 @@ struct ARSceneView: View {
     
     // Add state to manage streaming session
     @State private var isJoiningStream = false
-    @State private var streamingWebRTCService = WebRTCService()
+    @State private var isHostingStream = false
+    
+    // Add state to track if we need to resume AR after dismissal
+    @State private var needsARResume = false
     
     var body: some View {
         ZStack(alignment: .bottom) {
             // Only show AR view when not streaming
-            if !isJoiningStream {
+            if !isJoiningStream && !isHostingStream {
                 ARPlaneCaptureView(
                     capturedModelURL: capturedModelURL,
                     viewController: arController
@@ -30,6 +33,14 @@ struct ARSceneView: View {
                     print("ARSceneView appeared")
                     // Explicitly disable any coaching overlays
                     arController.removeCoachingOverlay()
+                    
+                    // Resume AR if we're returning from streaming
+                    if needsARResume {
+                        needsARResume = false
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            arController.resumeARSession()
+                        }
+                    }
                 }
             }
             
@@ -38,9 +49,9 @@ struct ARSceneView: View {
                 HStack {
                     // Back Button - Different action depending on mode
                     Button(action: {
-                        if isJoiningStream {
+                        if isJoiningStream || isHostingStream {
                             // If we're streaming, stop streaming and go back to AR view
-                            stopStreaming()
+                            handleReturnFromStreaming()
                         } else if arController.isWorkModeActive {
                             // Exit work mode and return to normal mode
                             arController.isWorkModeActive = false
@@ -79,6 +90,14 @@ struct ARSceneView: View {
                             .padding(.vertical, 6)
                             .background(Color.purple.opacity(0.7))
                             .cornerRadius(10)
+                    } else if isHostingStream {
+                        Text("Hosting Stream")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.green.opacity(0.7))
+                            .cornerRadius(10)
                     }
                     // Work Mode / Streaming Button depending on context
                     else if arController.isWorkModeActive {
@@ -90,22 +109,22 @@ struct ARSceneView: View {
                             .background(Color.green.opacity(0.7))
                             .cornerRadius(10)
                         
-                        // Streaming toggle button in work mode
+                        // Host button in work mode (renamed from streaming)
                         Button(action: {
-                            arController.toggleStreamMode()
+                            startHostingStream()
                         }) {
-                            Image(systemName: arController.isStreamingActive ? "wifi" : "wifi.slash")
+                            Image(systemName: "wifi")
                                 .font(.system(size: 20))
                                 .foregroundColor(.white)
                                 .frame(width: 40, height: 40)
                         }
-                        .background(arController.isStreamingActive ? Color.blue.opacity(0.7) : Color.black.opacity(0.7))
+                        .background(Color.blue.opacity(0.7))
                         .clipShape(Circle())
                         .padding(.trailing, 20)
                     } else {
                         // Standard mode controls
                         HStack {
-                            // Stream join button in standard mode
+                            // Join button in standard mode
                             Button(action: {
                                 startJoiningStream()
                             }) {
@@ -145,118 +164,353 @@ struct ARSceneView: View {
             }
             .edgesIgnoringSafeArea(.top)
             
-            // UI Overlays based on current mode
-            VStack {
-                Spacer()
-                
-                if !isJoiningStream {
-                    if !arController.isModelPlaced {
-                        // Initial placement instruction
-                        Text("Tap on a surface to place the model")
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            .background(Color.black.opacity(0.7))
-                            .cornerRadius(10)
-                            .padding(.bottom, 20)
-                    }
+            // Main UI overlay with ZStack to properly layer controls
+            ZStack {
+                // Main content container
+                VStack {
+                    Spacer()
                     
-                    // Only show control buttons if model is placed
-                    if arController.isModelPlaced {
-                        if arController.isWorkModeActive {
-                            // Work Mode Controls
-                            HStack(spacing: 30) {
-                                // Pulse Button
-                                Button(action: {
-                                    arController.togglePulsing()
-                                }) {
-                                    Image(systemName: "waveform.path")
-                                        .font(.system(size: 20))
-                                        .foregroundColor(.white)
-                                        .frame(width: 40, height: 40)
+                    if !isJoiningStream && !isHostingStream {
+                        if !arController.isModelPlaced {
+                            // Initial placement instruction
+                            Text("Tap on a surface to place the model")
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .background(Color.black.opacity(0.7))
+                                .cornerRadius(10)
+                                .padding(.bottom, 20)
+                        }
+                        
+                        // Only show control buttons if model is placed
+                        if arController.isModelPlaced {
+                            if arController.isWorkModeActive {
+                                // Work Mode Controls
+                                HStack(spacing: 30) {
+                                    // Pulse Button
+                                    Button(action: {
+                                        arController.togglePulsing()
+                                    }) {
+                                        Image(systemName: "waveform.path")
+                                            .font(.system(size: 20))
+                                            .foregroundColor(.white)
+                                            .frame(width: 40, height: 40)
+                                    }
+                                    .background(arController.isPulsing ? Color.green.opacity(0.7) : Color.black.opacity(0.7))
+                                    .clipShape(Circle())
                                 }
-                                .background(arController.isPulsing ? Color.green.opacity(0.7) : Color.black.opacity(0.7))
-                                .clipShape(Circle())
+                                .padding(.bottom, 20)
+                            } else {
+                                // Normal Mode Controls - always show these in the same position
+                                HStack(spacing: 30) {
+                                    // Pulse Button
+                                    Button(action: {
+                                        arController.togglePulsing()
+                                    }) {
+                                        Image(systemName: "waveform.path")
+                                            .font(.system(size: 20))
+                                            .foregroundColor(.white)
+                                            .frame(width: 40, height: 40)
+                                    }
+                                    .background(arController.isPulsing ? Color.green.opacity(0.7) : Color.black.opacity(0.7))
+                                    .clipShape(Circle())
+                                    
+                                    // Rotation Lock
+                                    Button(action: {
+                                        arController.lockedRotation.toggle()
+                                    }) {
+                                        Image(systemName: arController.lockedRotation ? "rotate.left.fill" : "rotate.left")
+                                            .font(.system(size: 20))
+                                            .foregroundColor(.white)
+                                            .frame(width: 40, height: 40)
+                                    }
+                                    .background(arController.lockedRotation ? Color.red.opacity(0.7) : Color.black.opacity(0.7))
+                                    .clipShape(Circle())
+                                    
+                                    // Scale Lock
+                                    Button(action: {
+                                        arController.lockedScale.toggle()
+                                    }) {
+                                        Image(systemName: arController.lockedScale ? "arrow.up.and.down.circle.fill" : "arrow.up.and.down.circle")
+                                            .font(.system(size: 20))
+                                            .foregroundColor(.white)
+                                            .frame(width: 40, height: 40)
+                                    }
+                                    .background(arController.lockedScale ? Color.red.opacity(0.7) : Color.black.opacity(0.7))
+                                    .clipShape(Circle())
+                                    
+                                    // Position Lock
+                                    Button(action: {
+                                        arController.lockedPosition.toggle()
+                                    }) {
+                                        Image(systemName: arController.lockedPosition ? "lock.fill" : "lock.open")
+                                            .font(.system(size: 20))
+                                            .foregroundColor(.white)
+                                            .frame(width: 40, height: 40)
+                                    }
+                                    .background(arController.lockedPosition ? Color.red.opacity(0.7) : Color.black.opacity(0.7))
+                                    .clipShape(Circle())
+                                }
+                                .padding(.bottom, 20)
+                                .zIndex(1) // Ensure these stay on top
                             }
-                            .padding(.bottom, 20)
-                            
-                            // Show streaming status if active
-                            if arController.isStreamingActive {
-                                Text("AR Scene Streaming Active")
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 8)
-                                    .background(Color.blue.opacity(0.7))
-                                    .cornerRadius(10)
-                                    .padding(.bottom, 20)
-                            }
-                        } else {
-                            // Normal Mode Controls
-                            HStack(spacing: 30) {
-                                // Various control buttons...
-                                // (control buttons code remains the same)
-                            }
-                            .padding(.bottom, 20)
                         }
                     }
                 }
-            }
-            
-            // Show streaming view when joining a stream
-            if isJoiningStream {
-                StreamingView(webRTCService: streamingWebRTCService) {
-                    stopStreaming()
+                
+                // Model Controls when selected - show on sides without affecting bottom controls
+                if arController.isModelSelected && !arController.isWorkModeActive && arController.isModelPlaced {
+                    HStack {
+                        // Left side controls column
+                        VStack(spacing: 15) {
+                            // Auto-align button
+                            Button(action: {
+                                arController.autoAlignModelWithSurface()
+                            }) {
+                                Image(systemName: "square.stack.3d.up.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(.white)
+                                    .frame(width: 40, height: 40)
+                                    .background(Color.black.opacity(0.5))
+                                    .clipShape(Circle())
+                            }
+                            
+                            // X-axis rotation toggle
+                            Button(action: {
+                                arController.toggleRotationX()
+                            }) {
+                                Image(systemName: "rotate.3d.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(arController.isRotatingX ? .yellow : .white)
+                                    .frame(width: 40, height: 40)
+                                    .background(Color.black.opacity(0.5))
+                                    .clipShape(Circle())
+                                    .overlay(
+                                        Text("X")
+                                            .font(.caption2)
+                                            .foregroundColor(.white)
+                                            .offset(x: 12, y: 12)
+                                    )
+                            }
+                            
+                            // Y-axis rotation toggle
+                            Button(action: {
+                                arController.toggleRotationY()
+                            }) {
+                                Image(systemName: "rotate.3d.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(arController.isRotatingY ? .yellow : .white)
+                                    .frame(width: 40, height: 40)
+                                    .background(Color.black.opacity(0.5))
+                                    .clipShape(Circle())
+                                    .overlay(
+                                        Text("Y")
+                                            .font(.caption2)
+                                            .foregroundColor(.white)
+                                            .offset(x: 12, y: 12)
+                                    )
+                            }
+                            
+                            // Z-axis rotation toggle
+                            Button(action: {
+                                arController.toggleRotationZ()
+                            }) {
+                                Image(systemName: "rotate.3d.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(arController.isRotatingZ ? .yellow : .white)
+                                    .frame(width: 40, height: 40)
+                                    .background(Color.black.opacity(0.5))
+                                    .clipShape(Circle())
+                                    .overlay(
+                                        Text("Z")
+                                            .font(.caption2)
+                                            .foregroundColor(.white)
+                                            .offset(x: 12, y: 12)
+                                    )
+                            }
+                        }
+                        .padding(.leading, 20)
+                        
+                        Spacer()
+                        
+                        // Right side controls column
+                        VStack(spacing: 15) {
+                            // Close button
+                            Button(action: {
+                                arController.isModelSelected = false
+                                arController.updateModelHighlight(isSelected: false)
+                                arController.modelManipulator.endManipulation()
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(.white)
+                                    .frame(width: 40, height: 40)
+                            }
+                            .background(Color.black.opacity(0.7))
+                            .clipShape(Circle())
+                            
+                            Spacer()
+                                .frame(height: 20)
+                            
+                            // Opacity increase button
+                            Button(action: {
+                                arController.increaseOpacity()
+                            }) {
+                                Image(systemName: "plus.circle")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(.white)
+                                    .frame(width: 40, height: 40)
+                            }
+                            .background(Color.black.opacity(0.7))
+                            .clipShape(Circle())
+                            
+                            // Opacity decrease button
+                            Button(action: {
+                                arController.decreaseOpacity()
+                            }) {
+                                Image(systemName: "minus.circle")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(.white)
+                                    .frame(width: 40, height: 40)
+                            }
+                            .background(Color.black.opacity(0.7))
+                            .clipShape(Circle())
+                            
+                            Spacer()
+                                .frame(height: 20)
+                            
+                            
+                             // Undo button
+                             Button(action: {
+                                 arController.undoTransformation()
+                             }) {
+                                 Image(systemName: "arrow.uturn.backward")
+                                     .font(.system(size: 20))
+                                     .foregroundColor(.white)
+                                     .frame(width: 40, height: 40)
+                             }
+                             .background(arController.canUndo ? Color.blue.opacity(0.7) : Color.gray.opacity(0.7))
+                             .clipShape(Circle())
+                             .disabled(!arController.canUndo)
+                             .opacity(arController.canUndo ? 1.0 : 0.6)
+                             
+                             // Redo button
+                             Button(action: {
+                                 arController.redoTransformation()
+                             }) {
+                                 Image(systemName: "arrow.uturn.forward")
+                                     .font(.system(size: 20))
+                                     .foregroundColor(.white)
+                                     .frame(width: 40, height: 40)
+                             }
+                             .background(arController.canRedo ? Color.blue.opacity(0.7) : Color.gray.opacity(0.7))
+                             .clipShape(Circle())
+                             .disabled(!arController.canRedo)
+                             .opacity(arController.canRedo ? 1.0 : 0.6)
+                            
+                            // Reset button
+                            Button(action: {
+                                arController.resetModelTransforms()
+                            }) {
+                                Image(systemName: "arrow.counterclockwise.circle")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(.white)
+                                    .frame(width: 40, height: 40)
+                            }
+                            .background(Color.black.opacity(0.7))
+                            .clipShape(Circle())
+                            
+                            Spacer()
+                                .frame(height: 20)
+                            
+                            // Z-depth adjustment
+                            Button(action: {
+                                arController.toggleDepthAdjustment()
+                            }) {
+                                Image(systemName: "arrow.up.and.down.and.arrow.left.and.right")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(arController.isAdjustingDepth ? .yellow : .white)
+                                    .frame(width: 40, height: 40)
+                            }
+                            .background(arController.isAdjustingDepth ? Color.green.opacity(0.7) : Color.black.opacity(0.5))
+                            .clipShape(Circle())
+                        }
+                        .padding(.trailing, 20)
+                    }
+                    // Position the side controls to leave space at the bottom for normal controls
+                    .padding(.bottom, 80)
+                    .transition(.opacity)
+                    .animation(.easeInOut(duration: 0.2), value: arController.isModelSelected)
                 }
-                .edgesIgnoringSafeArea(.all)
-                .transition(.opacity)
-                .animation(.easeInOut, value: isJoiningStream)
             }
         }
-        .onDisappear {
-            // Clean up any streaming connections when view disappears
-            if isJoiningStream {
-                stopStreaming()
+        .fullScreenCover(isPresented: $isJoiningStream, onDismiss: {
+            // This callback is called when the JoinView is dismissed
+            // Mark that we need to resume the AR session
+            needsARResume = true
+        }) {
+            // Present the JoinView as a full-screen cover
+            JoinView(onClose: {
+                // This callback is called when the JoinView's Close button is tapped
+                handleReturnFromStreaming()
+            })
+        }
+        .fullScreenCover(isPresented: $isHostingStream, onDismiss: {
+            // This callback is called when the HostView is dismissed
+            // Mark that we need to resume the AR session
+            needsARResume = true
+        }) {
+            // Present the HostView as a full-screen cover
+            HostView(onClose: {
+                // This callback is called when the HostView's Close button is tapped
+                handleReturnFromStreaming()
+            })
+        }
+        .onChange(of: isJoiningStream) { _, isJoining in
+            if !isJoining {
+                // We're returning from joining mode
+                print("Join mode ended, will resume AR session")
             }
+        }
+        .onChange(of: isHostingStream) { _, isHosting in
+            if !isHosting {
+                // We're returning from hosting mode
+                print("Host mode ended, will resume AR session")
+            }
+        }
+    }
+    
+    // Centralized method to handle returning from streaming mode
+    private func handleReturnFromStreaming() {
+        // First set our streaming state variables to false
+        isJoiningStream = false
+        isHostingStream = false
+        
+        // Mark that we need to resume the AR session
+        needsARResume = true
+        
+        // Give the UI time to update before resuming AR
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            arController.resumeARSession()
         }
     }
     
     // Start joining WebRTC stream
     private func startJoiningStream() {
-        // Completely end the AR session
-        arController.clearARScene()
-        
-        // Reset the app model state
-        if appModel.objectCaptureSession != nil {
-            // End the current ObjectCaptureSession
-            appModel.objectCaptureSession?.cancel()
-            appModel.objectCaptureSession = nil
-        }
-        
-        // Initialize WebRTC service
-        streamingWebRTCService = WebRTCService()
+        // End the AR session
+        arController.pauseARSession()
         
         // Set state to trigger UI update
         isJoiningStream = true
-        
-        // Wait a moment for resources to free up, then start joining
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            streamingWebRTCService.startJoining()
-        }
     }
     
-    // Stop streaming and return to AR view
-    private func stopStreaming() {
-        // Disconnect WebRTC
-        streamingWebRTCService.disconnect()
+    // Start hosting WebRTC stream
+    private func startHostingStream() {
+        // Pause AR session to free camera for streaming
+        arController.pauseARSession()
         
-        // Reset state
-        isJoiningStream = false
-        
-        // After a short delay to let resources release, restart in clean state
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            // Restart app in original state
-            appModel.state = .restart
-        }
+        // Set state to trigger UI update
+        isHostingStream = true
     }
 }
 

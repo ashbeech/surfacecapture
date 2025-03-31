@@ -3,137 +3,71 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 71;
+	objectVersion = 77;
 	objects = {
 
-/* Begin PBXAggregateTarget section */
-		0114D78AA29C45BB52A782B0ED8994CC /* WebRTC-SDK */ = {
-			isa = PBXAggregateTarget;
-			buildConfigurationList = 6207A12C46DDAC2F8DFCA72C1CC23F44 /* Build configuration list for PBXAggregateTarget "WebRTC-SDK" */;
-			buildPhases = (
-				F8353241D51ADA6BDF3E4EF0FC51318F /* [CP] Copy XCFrameworks */,
-			);
-			dependencies = (
-			);
-			name = "WebRTC-SDK";
-			productName = "WebRTC-SDK";
-		};
-/* End PBXAggregateTarget section */
-
 /* Begin PBXBuildFile section */
-		0505264A9E0D13F2C3C12E1DEADB5450 /* Pods-Surface Capture-dummy.m in Sources */ = {isa = PBXBuildFile; fileRef = A17B43255FD513CFAB74A2E44F446C38 /* Pods-Surface Capture-dummy.m */; };
-		500E40E47E7FAFF0F487A6F2229297F2 /* Pods-Surface Capture-umbrella.h in Headers */ = {isa = PBXBuildFile; fileRef = EE529C826A6A7EDE41388EBB15E90816 /* Pods-Surface Capture-umbrella.h */; settings = {ATTRIBUTES = (Public, ); }; };
-		F93E51F5415A46A6BD24DD243D5E3105 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 384DDA2CB25005BD6479B5987C619DD4 /* Foundation.framework */; };
+		7FA75641EFC5E0250F5EF87195F0D50B /* Pods-Surface Capture-umbrella.h in Headers */ = {isa = PBXBuildFile; fileRef = D59BADCE6775AA063F9E87FC40EC1197 /* Pods-Surface Capture-umbrella.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		A91E55BC7270D8A2B0417B40E2851B35 /* Pods-Surface Capture-dummy.m in Sources */ = {isa = PBXBuildFile; fileRef = CF309610B1463AED882687431D66825F /* Pods-Surface Capture-dummy.m */; };
+		E4CFA6A20EC29CE8AF92537BB2B180D2 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 384DDA2CB25005BD6479B5987C619DD4 /* Foundation.framework */; };
 /* End PBXBuildFile section */
 
-/* Begin PBXContainerItemProxy section */
-		8C2394861B4D96460AA5C059ECBC5FD3 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = BFDFE7DC352907FC980B868725387E98 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 0114D78AA29C45BB52A782B0ED8994CC;
-			remoteInfo = "WebRTC-SDK";
-		};
-/* End PBXContainerItemProxy section */
-
 /* Begin PBXFileReference section */
-		00D5A4BCCC6826C8F7953CCD60325412 /* WebRTC-SDK-xcframeworks.sh */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.script.sh; path = "WebRTC-SDK-xcframeworks.sh"; sourceTree = "<group>"; };
-		24093338C83C7B8C01F41C2AED74B821 /* Pods-Surface Capture-acknowledgements.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "Pods-Surface Capture-acknowledgements.plist"; sourceTree = "<group>"; };
+		0F52C00DC2C8BE464FDB4B5DF4F1D116 /* Pods-Surface Capture.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "Pods-Surface Capture.debug.xcconfig"; sourceTree = "<group>"; };
+		35B20DE0D09189373E1A15A02A646F9D /* Pods-Surface Capture-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "Pods-Surface Capture-Info.plist"; sourceTree = "<group>"; };
 		384DDA2CB25005BD6479B5987C619DD4 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
-		4AB2AB9B52F1FA1E461F6833504711A3 /* WebRTC-SDK.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "WebRTC-SDK.release.xcconfig"; sourceTree = "<group>"; };
-		515073134B4B269B1AFB17D7167415C2 /* Pods_Surface_Capture.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Surface_Capture.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		520FA61720B0F9A8FF0C049680619455 /* Pods-Surface Capture.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "Pods-Surface Capture.debug.xcconfig"; sourceTree = "<group>"; };
-		535EDF28ED7CEB34FB6B7DD613A81B9E /* Pods-Surface Capture.modulemap */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.module; path = "Pods-Surface Capture.modulemap"; sourceTree = "<group>"; };
-		683C074E1AFED1087DC552B92409F996 /* Pods-Surface Capture-acknowledgements.markdown */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text; path = "Pods-Surface Capture-acknowledgements.markdown"; sourceTree = "<group>"; };
-		7D59CAA8CBD36D6FD9CFD1A591B39DE9 /* Pods-Surface Capture-frameworks.sh */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.script.sh; path = "Pods-Surface Capture-frameworks.sh"; sourceTree = "<group>"; };
-		9D940727FF8FB9C785EB98E56350EF41 /* Podfile */ = {isa = PBXFileReference; explicitFileType = text.script.ruby; includeInIndex = 1; indentWidth = 2; name = Podfile; path = ../Podfile; sourceTree = SOURCE_ROOT; tabWidth = 2; xcLanguageSpecificationIdentifier = xcode.lang.ruby; };
-		A17B43255FD513CFAB74A2E44F446C38 /* Pods-Surface Capture-dummy.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = "Pods-Surface Capture-dummy.m"; sourceTree = "<group>"; };
-		BDEFD7CFC20FA55619B809C1A09A9AF7 /* WebRTC-SDK.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "WebRTC-SDK.debug.xcconfig"; sourceTree = "<group>"; };
-		C8E43EF6EEF18947D361740A2B4C12F9 /* Pods-Surface Capture.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "Pods-Surface Capture.release.xcconfig"; sourceTree = "<group>"; };
-		CFA6C664E28B6C025C9EA5C55B3F157F /* Pods-Surface Capture-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "Pods-Surface Capture-Info.plist"; sourceTree = "<group>"; };
-		EE529C826A6A7EDE41388EBB15E90816 /* Pods-Surface Capture-umbrella.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = "Pods-Surface Capture-umbrella.h"; sourceTree = "<group>"; };
-		F613FA60FD74013114AF1A17E8073D99 /* WebRTC.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = wrapper.xcframework; path = WebRTC.xcframework; sourceTree = "<group>"; };
+		515073134B4B269B1AFB17D7167415C2 /* Pods-Surface Capture */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; name = "Pods-Surface Capture"; path = Pods_Surface_Capture.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		65658BABA95A0A594D2336D5CC3CCA1D /* Pods-Surface Capture-acknowledgements.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "Pods-Surface Capture-acknowledgements.plist"; sourceTree = "<group>"; };
+		9D940727FF8FB9C785EB98E56350EF41 /* Podfile */ = {isa = PBXFileReference; explicitFileType = text.script.ruby; includeInIndex = 1; indentWidth = 2; lastKnownFileType = text; name = Podfile; path = ../Podfile; sourceTree = SOURCE_ROOT; tabWidth = 2; xcLanguageSpecificationIdentifier = xcode.lang.ruby; };
+		B7E807249767D686B9822D8F2398F53D /* Pods-Surface Capture.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = "Pods-Surface Capture.release.xcconfig"; sourceTree = "<group>"; };
+		BEB8B48B6385DAD35C118EFD43726276 /* Pods-Surface Capture-acknowledgements.markdown */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text; path = "Pods-Surface Capture-acknowledgements.markdown"; sourceTree = "<group>"; };
+		CF309610B1463AED882687431D66825F /* Pods-Surface Capture-dummy.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = "Pods-Surface Capture-dummy.m"; sourceTree = "<group>"; };
+		D59BADCE6775AA063F9E87FC40EC1197 /* Pods-Surface Capture-umbrella.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = "Pods-Surface Capture-umbrella.h"; sourceTree = "<group>"; };
+		E4D087837E9408BF3D72039C47B795A5 /* Pods-Surface Capture.modulemap */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.module; path = "Pods-Surface Capture.modulemap"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		6FAA39DCC107EB33FF71D9160880A9F9 /* Frameworks */ = {
+		C0F2A312BFEC2A846C85465E8C0A78B8 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F93E51F5415A46A6BD24DD243D5E3105 /* Foundation.framework in Frameworks */,
+				E4CFA6A20EC29CE8AF92537BB2B180D2 /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		070F4F55C097097F7DA6250D91ACACBA /* Pods-Surface Capture */ = {
+		4814C32CD32D747C1458BBCF05B6B062 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				535EDF28ED7CEB34FB6B7DD613A81B9E /* Pods-Surface Capture.modulemap */,
-				683C074E1AFED1087DC552B92409F996 /* Pods-Surface Capture-acknowledgements.markdown */,
-				24093338C83C7B8C01F41C2AED74B821 /* Pods-Surface Capture-acknowledgements.plist */,
-				A17B43255FD513CFAB74A2E44F446C38 /* Pods-Surface Capture-dummy.m */,
-				7D59CAA8CBD36D6FD9CFD1A591B39DE9 /* Pods-Surface Capture-frameworks.sh */,
-				CFA6C664E28B6C025C9EA5C55B3F157F /* Pods-Surface Capture-Info.plist */,
-				EE529C826A6A7EDE41388EBB15E90816 /* Pods-Surface Capture-umbrella.h */,
-				520FA61720B0F9A8FF0C049680619455 /* Pods-Surface Capture.debug.xcconfig */,
-				C8E43EF6EEF18947D361740A2B4C12F9 /* Pods-Surface Capture.release.xcconfig */,
+				515073134B4B269B1AFB17D7167415C2 /* Pods-Surface Capture */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		B7813E759AFE70F88CEF61B8E0B21FAE /* Pods-Surface Capture */ = {
+			isa = PBXGroup;
+			children = (
+				E4D087837E9408BF3D72039C47B795A5 /* Pods-Surface Capture.modulemap */,
+				BEB8B48B6385DAD35C118EFD43726276 /* Pods-Surface Capture-acknowledgements.markdown */,
+				65658BABA95A0A594D2336D5CC3CCA1D /* Pods-Surface Capture-acknowledgements.plist */,
+				CF309610B1463AED882687431D66825F /* Pods-Surface Capture-dummy.m */,
+				35B20DE0D09189373E1A15A02A646F9D /* Pods-Surface Capture-Info.plist */,
+				D59BADCE6775AA063F9E87FC40EC1197 /* Pods-Surface Capture-umbrella.h */,
+				0F52C00DC2C8BE464FDB4B5DF4F1D116 /* Pods-Surface Capture.debug.xcconfig */,
+				B7E807249767D686B9822D8F2398F53D /* Pods-Surface Capture.release.xcconfig */,
 			);
 			name = "Pods-Surface Capture";
 			path = "Target Support Files/Pods-Surface Capture";
 			sourceTree = "<group>";
 		};
-		138B87E878A488608D753587F16A365F /* Support Files */ = {
+		C0D635C1C89087E121FAA592B5AC2666 /* Targets Support Files */ = {
 			isa = PBXGroup;
 			children = (
-				00D5A4BCCC6826C8F7953CCD60325412 /* WebRTC-SDK-xcframeworks.sh */,
-				BDEFD7CFC20FA55619B809C1A09A9AF7 /* WebRTC-SDK.debug.xcconfig */,
-				4AB2AB9B52F1FA1E461F6833504711A3 /* WebRTC-SDK.release.xcconfig */,
-			);
-			name = "Support Files";
-			path = "../Target Support Files/WebRTC-SDK";
-			sourceTree = "<group>";
-		};
-		3E0954F75D899336EC28C0DB4390EA70 /* Targets Support Files */ = {
-			isa = PBXGroup;
-			children = (
-				070F4F55C097097F7DA6250D91ACACBA /* Pods-Surface Capture */,
+				B7813E759AFE70F88CEF61B8E0B21FAE /* Pods-Surface Capture */,
 			);
 			name = "Targets Support Files";
-			sourceTree = "<group>";
-		};
-		43735E02E25963F40BAD1D21CBD4CF4F /* WebRTC-SDK */ = {
-			isa = PBXGroup;
-			children = (
-				AED962EC6BF17430008D4CE808CB7994 /* Frameworks */,
-				138B87E878A488608D753587F16A365F /* Support Files */,
-			);
-			path = "WebRTC-SDK";
-			sourceTree = "<group>";
-		};
-		4814C32CD32D747C1458BBCF05B6B062 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				515073134B4B269B1AFB17D7167415C2 /* Pods_Surface_Capture.framework */,
-			);
-			name = Products;
-			sourceTree = "<group>";
-		};
-		A3A8D93225807B6184AD75E6AFE75099 /* Pods */ = {
-			isa = PBXGroup;
-			children = (
-				43735E02E25963F40BAD1D21CBD4CF4F /* WebRTC-SDK */,
-			);
-			name = Pods;
-			sourceTree = "<group>";
-		};
-		AED962EC6BF17430008D4CE808CB7994 /* Frameworks */ = {
-			isa = PBXGroup;
-			children = (
-				F613FA60FD74013114AF1A17E8073D99 /* WebRTC.xcframework */,
-			);
-			name = Frameworks;
 			sourceTree = "<group>";
 		};
 		CF1408CF629C7361332E53B88F7BD30C = {
@@ -141,9 +75,8 @@
 			children = (
 				9D940727FF8FB9C785EB98E56350EF41 /* Podfile */,
 				D210D550F4EA176C3123ED886F8F87F5 /* Frameworks */,
-				A3A8D93225807B6184AD75E6AFE75099 /* Pods */,
 				4814C32CD32D747C1458BBCF05B6B062 /* Products */,
-				3E0954F75D899336EC28C0DB4390EA70 /* Targets Support Files */,
+				C0D635C1C89087E121FAA592B5AC2666 /* Targets Support Files */,
 			);
 			sourceTree = "<group>";
 		};
@@ -166,11 +99,11 @@
 /* End PBXGroup section */
 
 /* Begin PBXHeadersBuildPhase section */
-		A269ECF58F3694C36D089C7C96CC6B30 /* Headers */ = {
+		C6A04CFA051E77E28B78386B9DF4C791 /* Headers */ = {
 			isa = PBXHeadersBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				500E40E47E7FAFF0F487A6F2229297F2 /* Pods-Surface Capture-umbrella.h in Headers */,
+				7FA75641EFC5E0250F5EF87195F0D50B /* Pods-Surface Capture-umbrella.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -179,21 +112,20 @@
 /* Begin PBXNativeTarget section */
 		E5F6E530D103FB29AB2312AB78438998 /* Pods-Surface Capture */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 37E636863C05E952965C322F426ABD63 /* Build configuration list for PBXNativeTarget "Pods-Surface Capture" */;
+			buildConfigurationList = EAAB127712B7D4E2DD9A74ED016E721D /* Build configuration list for PBXNativeTarget "Pods-Surface Capture" */;
 			buildPhases = (
-				A269ECF58F3694C36D089C7C96CC6B30 /* Headers */,
-				38C47C607244BC02DF8710295DBDD531 /* Sources */,
-				6FAA39DCC107EB33FF71D9160880A9F9 /* Frameworks */,
-				E62412BCA57BB37EC846CB037BF4D996 /* Resources */,
+				C6A04CFA051E77E28B78386B9DF4C791 /* Headers */,
+				82835557197275832DD1424B323A0598 /* Sources */,
+				C0F2A312BFEC2A846C85465E8C0A78B8 /* Frameworks */,
+				796180090653B38F557D13C6C6B5DB59 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				D5DDAF1D8E66F0A10240826BB5393207 /* PBXTargetDependency */,
 			);
 			name = "Pods-Surface Capture";
 			productName = Pods_Surface_Capture;
-			productReference = 515073134B4B269B1AFB17D7167415C2 /* Pods_Surface_Capture.framework */;
+			productReference = 515073134B4B269B1AFB17D7167415C2 /* Pods-Surface Capture */;
 			productType = "com.apple.product-type.framework";
 		};
 /* End PBXNativeTarget section */
@@ -202,9 +134,8 @@
 		BFDFE7DC352907FC980B868725387E98 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				BuildIndependentTargetsInParallel = YES;
 				LastSwiftUpdateCheck = 1600;
-				LastUpgradeCheck = 1620;
+				LastUpgradeCheck = 1600;
 			};
 			buildConfigurationList = 4821239608C13582E20E6DA73FD5F1F9 /* Build configuration list for PBXProject "Pods" */;
 			compatibilityVersion = "Xcode 16.0";
@@ -215,18 +146,19 @@
 				en,
 			);
 			mainGroup = CF1408CF629C7361332E53B88F7BD30C;
+			minimizedProjectReferenceProxies = 0;
+			preferredProjectObjectVersion = 77;
 			productRefGroup = 4814C32CD32D747C1458BBCF05B6B062 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				E5F6E530D103FB29AB2312AB78438998 /* Pods-Surface Capture */,
-				0114D78AA29C45BB52A782B0ED8994CC /* WebRTC-SDK */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		E62412BCA57BB37EC846CB037BF4D996 /* Resources */ = {
+		796180090653B38F557D13C6C6B5DB59 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -235,59 +167,33 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
-/* Begin PBXShellScriptBuildPhase section */
-		F8353241D51ADA6BDF3E4EF0FC51318F /* [CP] Copy XCFrameworks */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/WebRTC-SDK/WebRTC-SDK-xcframeworks-input-files.xcfilelist",
-			);
-			name = "[CP] Copy XCFrameworks";
-			outputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/WebRTC-SDK/WebRTC-SDK-xcframeworks-output-files.xcfilelist",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/WebRTC-SDK/WebRTC-SDK-xcframeworks.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
-/* End PBXShellScriptBuildPhase section */
-
 /* Begin PBXSourcesBuildPhase section */
-		38C47C607244BC02DF8710295DBDD531 /* Sources */ = {
+		82835557197275832DD1424B323A0598 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				0505264A9E0D13F2C3C12E1DEADB5450 /* Pods-Surface Capture-dummy.m in Sources */,
+				A91E55BC7270D8A2B0417B40E2851B35 /* Pods-Surface Capture-dummy.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
-/* Begin PBXTargetDependency section */
-		D5DDAF1D8E66F0A10240826BB5393207 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			name = "WebRTC-SDK";
-			target = 0114D78AA29C45BB52A782B0ED8994CC /* WebRTC-SDK */;
-			targetProxy = 8C2394861B4D96460AA5C059ECBC5FD3 /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
-
 /* Begin XCBuildConfiguration section */
-		4EF2C30018DB811EAF947321E727ACD8 /* Debug */ = {
+		361A59BEFB466B40451FA75D8CE59193 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 520FA61720B0F9A8FF0C049680619455 /* Pods-Surface Capture.debug.xcconfig */;
+			baseConfigurationReference = B7E807249767D686B9822D8F2398F53D /* Pods-Surface Capture.release.xcconfig */;
 			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = NO;
 				CLANG_ENABLE_OBJC_WEAK = NO;
-				CODE_SIGN_IDENTITY = "";
+				"CODE_SIGN_IDENTITY[sdk=appletvos*]" = "";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "";
+				"CODE_SIGN_IDENTITY[sdk=watchos*]" = "";
 				CURRENT_PROJECT_VERSION = 1;
 				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				ENABLE_MODULE_VERIFIER = YES;
+				ENABLE_MODULE_VERIFIER = NO;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = "Target Support Files/Pods-Surface Capture/Pods-Surface Capture-Info.plist";
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
@@ -299,7 +205,6 @@
 				);
 				MACH_O_TYPE = staticlib;
 				MODULEMAP_FILE = "Target Support Files/Pods-Surface Capture/Pods-Surface Capture.modulemap";
-				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu11 gnu++14";
 				OTHER_LDFLAGS = "";
 				OTHER_LIBTOOLFLAGS = "";
 				PODS_ROOT = "$(SRCROOT)";
@@ -308,10 +213,11 @@
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
 				VERSIONING_SYSTEM = "apple-generic";
 				VERSION_INFO_PREFIX = "";
 			};
-			name = Debug;
+			name = Release;
 		};
 		6A5C026ED62BBFE3380CD257EEFAEB20 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -348,11 +254,9 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -373,6 +277,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRIP_INSTALLED_PRODUCT = NO;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -380,55 +285,21 @@
 			};
 			name = Debug;
 		};
-		6B7EE7E461FCA52B70114159C8734AB4 /* Release */ = {
+		99517C7F6A111251874DCD49166CBA2A /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 4AB2AB9B52F1FA1E461F6833504711A3 /* WebRTC-SDK.release.xcconfig */;
+			baseConfigurationReference = 0F52C00DC2C8BE464FDB4B5DF4F1D116 /* Pods-Surface Capture.debug.xcconfig */;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = NO;
 				CLANG_ENABLE_OBJC_WEAK = NO;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				VALIDATE_PRODUCT = YES;
-			};
-			name = Release;
-		};
-		ADB71203D0DD8980D158608014FED3DF /* Debug */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = BDEFD7CFC20FA55619B809C1A09A9AF7 /* WebRTC-SDK.debug.xcconfig */;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CLANG_ENABLE_OBJC_WEAK = NO;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
-				IPHONEOS_DEPLOYMENT_TARGET = 12.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-				);
-				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Debug;
-		};
-		BBB8C7A28962CDB2F464AF2408968172 /* Release */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = C8E43EF6EEF18947D361740A2B4C12F9 /* Pods-Surface Capture.release.xcconfig */;
-			buildSettings = {
-				CLANG_ENABLE_OBJC_WEAK = NO;
-				CODE_SIGN_IDENTITY = "";
+				"CODE_SIGN_IDENTITY[sdk=appletvos*]" = "";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "";
+				"CODE_SIGN_IDENTITY[sdk=watchos*]" = "";
 				CURRENT_PROJECT_VERSION = 1;
 				DEFINES_MODULE = YES;
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				DYLIB_INSTALL_NAME_BASE = "@rpath";
-				ENABLE_MODULE_VERIFIER = YES;
+				ENABLE_MODULE_VERIFIER = NO;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				INFOPLIST_FILE = "Target Support Files/Pods-Surface Capture/Pods-Surface Capture-Info.plist";
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Frameworks";
@@ -440,7 +311,6 @@
 				);
 				MACH_O_TYPE = staticlib;
 				MODULEMAP_FILE = "Target Support Files/Pods-Surface Capture/Pods-Surface Capture.modulemap";
-				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu11 gnu++14";
 				OTHER_LDFLAGS = "";
 				OTHER_LIBTOOLFLAGS = "";
 				PODS_ROOT = "$(SRCROOT)";
@@ -449,11 +319,10 @@
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				VALIDATE_PRODUCT = YES;
 				VERSIONING_SYSTEM = "apple-generic";
 				VERSION_INFO_PREFIX = "";
 			};
-			name = Release;
+			name = Debug;
 		};
 		E873CA97BD124B21839AF13C9BE1CD18 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -490,11 +359,9 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_PREPROCESSOR_DEFINITIONS = (
@@ -511,6 +378,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRIP_INSTALLED_PRODUCT = NO;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
@@ -521,15 +389,6 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		37E636863C05E952965C322F426ABD63 /* Build configuration list for PBXNativeTarget "Pods-Surface Capture" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				4EF2C30018DB811EAF947321E727ACD8 /* Debug */,
-				BBB8C7A28962CDB2F464AF2408968172 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		4821239608C13582E20E6DA73FD5F1F9 /* Build configuration list for PBXProject "Pods" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -539,11 +398,11 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		6207A12C46DDAC2F8DFCA72C1CC23F44 /* Build configuration list for PBXAggregateTarget "WebRTC-SDK" */ = {
+		EAAB127712B7D4E2DD9A74ED016E721D /* Build configuration list for PBXNativeTarget "Pods-Surface Capture" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				ADB71203D0DD8980D158608014FED3DF /* Debug */,
-				6B7EE7E461FCA52B70114159C8734AB4 /* Release */,
+				99517C7F6A111251874DCD49166CBA2A /* Debug */,
+				361A59BEFB466B40451FA75D8CE59193 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
