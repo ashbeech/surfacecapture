@@ -47,11 +47,14 @@ struct ContentView: View {
                             .environmentObject(appModel)
                     } else {
                         // Show a loading view while session initializes
-                        VStack {
-                            CircularProgressView()
-                            Text("Initializing camera...")
-                                .font(.headline)
-                                .padding()
+                        if appModel.state == .initializing {
+                            // Show a loading view while session initializes
+                            VStack {
+                                CircularProgressView()
+                                Text("Initializing camera...")
+                                    .font(.headline)
+                                    .padding()
+                            }
                         }
                     }
                 } else if appModel.state == .reconstructing || appModel.state == .prepareToReconstruct {
@@ -80,7 +83,7 @@ struct ContentView: View {
                 sessionInitializing = true
                 
                 // Check session state after a short delay to let initialization complete
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     if let session = appModel.objectCaptureSession {
                         if case .failed = session.state {
                             showErrorAlert = true
@@ -100,6 +103,8 @@ struct ContentView: View {
                     // Only show reconstruction view for object capture
                     showReconstructionView = true
                 }
+            } else if newState == .cancelled {
+                print("***** CANCELLED *****")
                 // For image mode, no need to do anything special - the ZStack condition will handle it
             } else if newState == .restart {
                 // Clear everything and go back to capture

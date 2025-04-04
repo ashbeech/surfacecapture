@@ -40,22 +40,16 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		5E2BC85C2D2824A500C7F6EF /* Surface Capture */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = "Surface Capture";
 			sourceTree = "<group>";
 		};
 		5E2BC86D2D2824A700C7F6EF /* Surface CaptureTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = "Surface CaptureTests";
 			sourceTree = "<group>";
 		};
 		5E2BC8772D2824A700C7F6EF /* Surface CaptureUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = "Surface CaptureUITests";
 			sourceTree = "<group>";
 		};
@@ -387,6 +381,7 @@
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_SUPPRESS_WARNINGS = NO;
 			};
 			name = Debug;
 		};
@@ -442,6 +437,7 @@
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_SUPPRESS_WARNINGS = NO;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
@@ -474,6 +470,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "com.thisisbullish.surfacecap.Surface-Capture";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_SUPPRESS_WARNINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -507,6 +504,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = "com.thisisbullish.surfacecap.Surface-Capture";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_SUPPRESS_WARNINGS = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};

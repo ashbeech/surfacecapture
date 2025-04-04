@@ -46,16 +46,11 @@ enum AppError: Error {
 @MainActor
 @available(iOS 17.0, *)
 class AppDataModel: ObservableObject, Identifiable {
-    let logger = Logger(subsystem: "com.example.SurfaceCapture", category: "AppDataModel")
-
-    static let instance = AppDataModel()
-
-    @Published var selectedModelEntity: ModelEntity?
-    var arViewController: ARPlaneCaptureViewController?
-
-    // Last state before pause, to restore after resuming
-    private var objectCaptureSessionStateBeforePause: ObjectCaptureSession.CaptureState?
     
+    let logger = Logger(subsystem: "com.example.SurfaceCapture", category: "AppDataModel")
+    static let instance = AppDataModel()
+    var arViewController: ARPlaneCaptureViewController?
+    @Published var selectedModelEntity: ModelEntity?
     @Published var captureQualityMetrics = CaptureQualityMetrics()
     @Published var captureQualityStatus: CaptureQualityStatus = .good
     @Published var objectCaptureSession: ObjectCaptureSession? {
@@ -88,6 +83,9 @@ class AppDataModel: ObservableObject, Identifiable {
     @Published var isPulsing: Bool = false
     @Published var isImagePickerPresented: Bool = false
 
+    private var stateMonitoringTask: Task<Void, Never>?
+    @Published var reconstructionProgress: Double = 0
+    
     private(set) var error: Swift.Error?
 
     private init() {
@@ -199,7 +197,7 @@ class AppDataModel: ObservableObject, Identifiable {
 
         scanFolderManager = folderManager
         
-        // Initialize ObjectCaptureSession without try-catch since these methods don't throw
+        // Initialize ObjectCaptureSession
         let session = ObjectCaptureSession()
         self.objectCaptureSession = session
         
@@ -207,23 +205,56 @@ class AppDataModel: ObservableObject, Identifiable {
         configuration.checkpointDirectory = scanFolderManager.snapshotsFolder
         configuration.isOverCaptureEnabled = true // Enable over-capture for better coverage
         
-        // Start the session and verify proper initialization
-        session.start(imagesDirectory: scanFolderManager.imagesFolder, configuration: configuration)
-        
-        // Check immediate state to catch early failures
-        if case let .failed(error) = session.state {
-            logger.error("Session failed to start: \(String(describing: error))")
-            switchToErrorState(error: error)
-            objectCaptureSession = nil
-            return false
+        // Launch a task to monitor initialization
+        Task {
+            await monitorSessionInitialization(session)
         }
         
-        // Set a monitoring task to detect any failures after initialization
-        monitorSessionState(session)
+        // Start the session
+        session.start(imagesDirectory: scanFolderManager.imagesFolder, configuration: configuration)
         
-        // Update app state to indicate we're capturing now
-        state = .capturing
+        // Monitor the session for failures
+        monitorSessionState(session)
+                
         return true
+    }
+
+    // Add this separate async method to handle initialization monitoring
+    private func monitorSessionInitialization(_ session: ObjectCaptureSession) async {
+        // Remove 'try' keyword and do-catch block
+        for await state in session.stateUpdates {
+            logger.debug("Session state update during initialization: \(String(describing: state))")
+
+            switch state {
+            case .ready, .detecting:
+                // Session is initialized and ready to use
+                logger.debug("Session is ready for capture")
+                await MainActor.run {
+                    // Update UI to show capture interface
+                    self.state = .capturing
+                }
+                return // Exit the monitoring loop once we reach ready state
+                
+            case .failed(let error):
+                logger.error("Session initialization failed: \(String(describing: error))")
+                await MainActor.run {
+                    self.switchToErrorState(error: error)
+                }
+                return // Exit the monitoring loop on failure
+                
+            case .completed:
+                // This should not happen during initialization, but handle it anyway
+                logger.debug("Session completed unexpectedly during initialization")
+                return
+                
+            default:
+                // Other states like initializing are expected during startup
+                logger.debug("Session in transition state: \(String(describing: state))")
+            }
+        }
+        
+        // If we exit the loop normally (which shouldn't happen), log it
+        logger.debug("Session state monitoring loop exited normally")
     }
 
     /// Sets up state monitoring for the session to catch failures after initialization
@@ -270,10 +301,38 @@ class AppDataModel: ObservableObject, Identifiable {
         }
     }
 
-    // Add to AppDataModel class property section:
-    private var stateMonitoringTask: Task<Void, Never>?
-    @Published var reconstructionProgress: Double = 0
-
+    func endObjectCaptureSession() {
+        // Log the operation
+        print("Ending ObjectCaptureSession gracefully...")
+        
+        // First, properly clean up any existing capture session and monitoring task
+        if objectCaptureSession != nil {
+            // Cancel the session
+            objectCaptureSession?.cancel()
+            
+            // Cancel state monitoring task
+            stateMonitoringTask?.cancel()
+            stateMonitoringTask = nil
+            
+            // Clear the session
+            objectCaptureSession = nil
+            
+            // Log successful cleanup
+            print("ObjectCaptureSession successfully cleaned up")
+        } else {
+            print("No ObjectCaptureSession to clean up")
+        }
+        
+        // Reset any related state
+        reconstructionProgress = 0
+        
+        // Reset state
+        state = .ready
+        
+        // Log completion
+        print("endObjectCaptureSession completed")
+    }
+    
     private func verifyReconstructionAssets(baseFolder: URL, snapshotID: String) -> Bool {
         let snapshotFolder = baseFolder.appendingPathComponent("Snapshots").appendingPathComponent(snapshotID)
 
@@ -551,6 +610,8 @@ class AppDataModel: ObservableObject, Identifiable {
                 selectedImage = nil
                 selectedModelEntity = nil
             }
+        case .cancelled:
+            logger.error("Cancelled")
         case .failed:
             logger.error("App failed with error: \(String(describing: self.error))")
         default:
@@ -578,6 +639,7 @@ extension AppDataModel {
         var description: String { rawValue }
 
         case notSet
+        case initializing
         case ready
         case capturing
         case prepareToReconstruct
@@ -585,6 +647,7 @@ extension AppDataModel {
         case viewing
         case completed
         case restart
+        case cancelled
         case failed
     }
 }

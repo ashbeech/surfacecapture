@@ -14,7 +14,6 @@ struct ARSceneView: View {
     @EnvironmentObject var appModel: AppDataModel
     
     // Add state to manage streaming session
-    @State private var isJoiningStream = false
     @State private var isHostingStream = false
     
     // Add state to track if we need to resume AR after dismissal
@@ -23,7 +22,7 @@ struct ARSceneView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             // Only show AR view when not streaming
-            if !isJoiningStream && !isHostingStream {
+            if !isHostingStream {
                 ARPlaneCaptureView(
                     capturedModelURL: capturedModelURL,
                     viewController: arController
@@ -49,7 +48,7 @@ struct ARSceneView: View {
                 HStack {
                     // Back Button - Different action depending on mode
                     Button(action: {
-                        if isJoiningStream || isHostingStream {
+                        if isHostingStream {
                             // If we're streaming, stop streaming and go back to AR view
                             handleReturnFromStreaming()
                         } else if arController.isWorkModeActive {
@@ -82,15 +81,7 @@ struct ARSceneView: View {
                     Spacer()
                     
                     // If we're streaming, show a streaming indicator
-                    if isJoiningStream {
-                        Text("Viewing Stream")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color.purple.opacity(0.7))
-                            .cornerRadius(10)
-                    } else if isHostingStream {
+                    if isHostingStream {
                         Text("Hosting Stream")
                             .font(.headline)
                             .foregroundColor(.white)
@@ -124,19 +115,6 @@ struct ARSceneView: View {
                     } else {
                         // Standard mode controls
                         HStack {
-                            // Join button in standard mode
-                            Button(action: {
-                                startJoiningStream()
-                            }) {
-                                Image(systemName: "wifi")
-                                    .font(.system(size: 20))
-                                    .foregroundColor(.white)
-                                    .frame(width: 40, height: 40)
-                            }
-                            .background(Color.purple.opacity(0.7))
-                            .clipShape(Circle())
-                            .padding(.trailing, 10)
-                            
                             // Work Mode Button in normal mode
                             Button(action: {
                                 arController.isWorkModeActive.toggle()
@@ -170,7 +148,7 @@ struct ARSceneView: View {
                 VStack {
                     Spacer()
                     
-                    if !isJoiningStream && !isHostingStream {
+                    if !isHostingStream {
                         if !arController.isModelPlaced {
                             // Initial placement instruction
                             Text("Tap on a surface to place the model")
@@ -444,17 +422,6 @@ struct ARSceneView: View {
                 }
             }
         }
-        .fullScreenCover(isPresented: $isJoiningStream, onDismiss: {
-            // This callback is called when the JoinView is dismissed
-            // Mark that we need to resume the AR session
-            needsARResume = true
-        }) {
-            // Present the JoinView as a full-screen cover
-            JoinView(onClose: {
-                // This callback is called when the JoinView's Close button is tapped
-                handleReturnFromStreaming()
-            })
-        }
         .fullScreenCover(isPresented: $isHostingStream, onDismiss: {
             // This callback is called when the HostView is dismissed
             // Mark that we need to resume the AR session
@@ -465,12 +432,6 @@ struct ARSceneView: View {
                 // This callback is called when the HostView's Close button is tapped
                 handleReturnFromStreaming()
             })
-        }
-        .onChange(of: isJoiningStream) { _, isJoining in
-            if !isJoining {
-                // We're returning from joining mode
-                print("Join mode ended, will resume AR session")
-            }
         }
         .onChange(of: isHostingStream) { _, isHosting in
             if !isHosting {
@@ -483,7 +444,6 @@ struct ARSceneView: View {
     // Centralized method to handle returning from streaming mode
     private func handleReturnFromStreaming() {
         // First set our streaming state variables to false
-        isJoiningStream = false
         isHostingStream = false
         
         // Mark that we need to resume the AR session
@@ -495,19 +455,10 @@ struct ARSceneView: View {
         }
     }
     
-    // Start joining WebRTC stream
-    private func startJoiningStream() {
-        // End the AR session
-        arController.pauseARSession()
-        
-        // Set state to trigger UI update
-        isJoiningStream = true
-    }
-    
     // Start hosting WebRTC stream
     private func startHostingStream() {
         // Pause AR session to free camera for streaming
-        arController.pauseARSession()
+        //arController.pauseARSession()
         
         // Set state to trigger UI update
         isHostingStream = true

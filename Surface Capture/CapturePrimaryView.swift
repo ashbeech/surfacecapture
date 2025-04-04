@@ -438,6 +438,7 @@ struct CapturePrimaryView: View {
     @State private var isInitializing = true
     @State private var initializationError: Error?
     @State private var isSessionReady = false
+    @State private var isManualCapturing = false
     
     // Tracking state
     @State private var sessionTracking: ObjectCaptureSession.Tracking = .normal
@@ -895,6 +896,32 @@ struct CapturePrimaryView: View {
                 
                 // Capturing state - button only, no help text
                 if isCapturing && !isTransitioning {
+                    VStack(spacing: 15) {
+                        // Add manual capture button
+                        Button(
+                            action: {
+                                session.requestImageCapture()
+                            },
+                            label: {
+                                ZStack {
+                                    // Inner circle with camera button
+                                    Circle()
+                                        .fill(Color.white)
+                                        .frame(width: 45, height: 45)
+                                    
+                                    // Outer circle stroke
+                                    Circle()
+                                        .stroke(Color.white.opacity(1), lineWidth: 2)
+                                        .frame(width: 50, height: 50)
+                                }
+                                .scaleEffect(isManualCapturing ? 0.9 : 1.0)
+                                .animation(.spring(response: 0.2), value: isManualCapturing)
+                            }
+                        )
+                        .disabled(!session.canRequestImageCapture)
+                        .opacity(session.canRequestImageCapture ? 1.0 : 0.5)
+
+                    // Progress button
                     CaptureProgressButton(
                         imageCount: capturedImageCount,
                         minRequired: AppDataModel.minNumImages,
@@ -919,7 +946,8 @@ struct CapturePrimaryView: View {
                         }
                     )
                     .frame(width: 220)
-                    .transition(.opacity)
+                }
+                .transition(.opacity)
                 }
             }
             .animation(.easeInOut(duration: 0.5), value: isCapturing)
@@ -933,13 +961,17 @@ struct CapturePrimaryView: View {
         @State private var showStreamingView = false
         @EnvironmentObject var appModel: AppDataModel
         
+        // Start joining WebRTC stream
+        private func startJoiningStream() {
+            // Gracefully end the object capture session without triggering errors
+            appModel.endObjectCaptureSession()
+            // Show the streaming view
+            showStreamingView = true
+        }
+        
         var body: some View {
             Button(action: {
-                // Gracefully end the object capture session without triggering errors
-                cleanlyEndObjectCaptureSession()
-                
-                // Show the streaming view
-                showStreamingView = true
+                startJoiningStream()
             }) {
                 HStack {
                     Image(systemName: "wifi")
@@ -954,53 +986,17 @@ struct CapturePrimaryView: View {
             }
             .fullScreenCover(isPresented: $showStreamingView, onDismiss: {
                 // Resume ObjectCaptureSession when streaming view is dismissed
+                /*
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     appModel.state = .restart
                 }
+                 */
             }) {
                 // Present the JoinView as a full-screen cover
                 JoinView(onClose: {
                     // This handles when the user explicitly closes the JoinView
                     showStreamingView = false
                 })
-            }
-        }
-        
-        // Helper function to gracefully end the ObjectCaptureSession without errors
-        private func cleanlyEndObjectCaptureSession() {
-            
-            
-            // TODO: SO we are cancelling object capture session on tap of join, but this triggers series of events that will dismiss JoinView.
-            // What should happen is we cancel object capture session on tap of join, but this should allow app to enter new state that is
-            // designed to handle joining a stream; so elegantly cancel OCS, and allow to reset return on close of JoinView.
-            
-            // First, remember the current state
-            let currentState = appModel.state
-            
-            // If we're capturing, temporarily set a transitional state to prevent error handling
-            if currentState == .capturing {
-                // Set to a neutral state first
-                appModel.state = .ready
-            }
-            
-            // Check if there's an active session and cancel it
-            if let session = appModel.objectCaptureSession {
-                // Cancel the session
-                session.cancel()
-                
-                // Clear the reference to prevent further callbacks
-                DispatchQueue.main.async {
-                    if appModel.objectCaptureSession === session {
-                        // Only nil out if it's still the same session
-                        // This prevents race conditions
-                        appModel.objectCaptureSession = nil
-                    }
-                }
-            }
-            
-            // Force a restart later to ensure clean state
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                appModel.state = .restart
             }
         }
     }
@@ -1072,6 +1068,38 @@ struct CapturePrimaryView: View {
         imageCountTimer = nil
     }
     
+    // MARK: - Manual Capture Methods
+    
+    /*
+    private func performManualCapture() {
+        guard isCapturing else { return }
+        
+        // Visual feedback - set state to show button animation
+        withAnimation {
+            isManualCapturing = true
+        }
+        
+        // Haptic feedback
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.prepare()
+        generator.impactOccurred()
+        
+        // Request manual frame capture from the session
+        session.requestImageCapture()
+        
+        // Reset the visual feedback after a short delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            withAnimation {
+                self.isManualCapturing = false
+            }
+            
+            // Update image count after a short delay to allow for processing
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.updateCapturedImageCount()
+            }
+        }
+    }*/
+    
     // MARK: - Helper Methods
     private func validateAndSetupSession() {
         isSessionReady = false
@@ -1100,9 +1128,9 @@ struct CapturePrimaryView: View {
                     print("Session state updated to: \(state)")
                     
                     switch state {
-                    case .ready, .detecting, .capturing:
+                    case .ready, .detecting:
                         isSessionReady = true
-                        isCameraReady = true
+                        isCameraReady = true  // Only enable camera when truly ready
                         isInitializing = false
                         timeout.cancel()
                         
@@ -1114,6 +1142,7 @@ struct CapturePrimaryView: View {
                         timeout.cancel()
                         
                     default:
+                        // Don't mark camera as ready for other states
                         break
                     }
                 }
@@ -1174,6 +1203,7 @@ struct CapturePrimaryView: View {
         
         print("Session state before starting capture: \(session.state)")
         
+        // Only start capturing if the session is in the ready or detecting state
         guard session.state == .ready || session.state == .detecting else {
             let message = "Waiting for camera to initialize. Please try again in a moment."
             appModel.messageList.add(message)
@@ -1181,6 +1211,7 @@ struct CapturePrimaryView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                 appModel.messageList.remove(message)
             }
+                        
             return
         }
         

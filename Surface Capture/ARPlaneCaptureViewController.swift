@@ -1044,10 +1044,14 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         // Pause the AR session
         if let arView = arView {
             // Store session configuration for later resumption
-            currentARConfiguration = arView.session.configuration
+            if currentARConfiguration == nil {
+                currentARConfiguration = arView.session.configuration
+            }
             
             // Pause the AR session
             arView.session.pause()
+            
+            // Temporarily disable delegates to free up resources
             arView.session.delegate = nil
         }
         
