@@ -453,6 +453,12 @@ struct CapturePrimaryView: View {
     @State private var capturedImageCount: Int = 0
     @State private var imageCountTimer: Timer?
     
+    // Scene Mesh Visualization
+    @State private var showSceneMesh: Bool = true
+    @State private var sceneMeshWireframe: Bool = true
+    @State private var sceneMeshRainbow: Bool = false
+    @State private var sceneMeshOpacity: Float = 0.7
+    
     // Legacy tracking monitor - kept for backward compatibility
     private let trackingMonitor = EnhancedTrackingMonitor()
     
@@ -525,6 +531,16 @@ struct CapturePrimaryView: View {
             if isSessionReady && !isTransitioning && !isImagePickerPresented && !isInImagePickerFlow {
                 ObjectCaptureView(session: session)
                     .hideObjectReticle(true)
+                    /*
+                    .customSceneMeshVisualization(
+                        session: session,
+                        isEnabled: $showSceneMesh,
+                        wireframeMode: $sceneMeshWireframe,
+                        rainbowMode: $sceneMeshRainbow,
+                        opacity: $sceneMeshOpacity,
+                        color: UIColor(.cyan)
+                    )
+                     */
                     .overlay(alignment: .topLeading) {
                         // Back button with circular styling
                         if isCapturing {

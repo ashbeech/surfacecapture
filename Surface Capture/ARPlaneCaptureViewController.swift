@@ -37,6 +37,7 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         // Use static variables of type void pointer instead of strings
         static var streamingServiceKey = UnsafeRawPointer(bitPattern: "streamingServiceKey".hashValue)!
         static var streamingHostingControllerKey = UnsafeRawPointer(bitPattern: "streamingHostingControllerKey".hashValue)!
+        //static var focusEntityManagerKey = UnsafeRawPointer(bitPattern: "focusEntityManagerKey".hashValue)!
     }
     /*
     // Create and get the WebRTC service instance
@@ -80,6 +81,8 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
     @Published var isRotatingY: Bool = false
     @Published var isRotatingZ: Bool = false
     
+    private var sceneMeshVisualizer: SceneMeshVisualizer?
+    
     init(mode: CaptureType, entity: ModelEntity? = nil) {
         self.mode = mode
         self.modelManipulator = ModelManipulator()
@@ -117,14 +120,167 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
     
     deinit {
         print("ARPlaneCaptureViewController is being deinitialized")
+        sceneMeshVisualizer?.cleanup()
+    }
+        
+    /*
+    /// Access to the focus entity manager
+    var focusEntityManager: FocusEntityManager? {
+        get {
+            return objc_getAssociatedObject(self, AssociatedKeys.focusEntityManagerKey) as? FocusEntityManager
+        }
+        set {
+            objc_setAssociatedObject(
+                self,
+                AssociatedKeys.focusEntityManagerKey,
+                newValue,
+                .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            )
+        }
     }
     
+    // MARK: - Setup Methods
+    
+    /// Sets up the focus entity manager
+    func setupFocusEntityManager() {
+        guard let arView = arView, focusEntityManager == nil else { return }
+        
+        // Create the focus entity manager
+        let manager = FocusEntityManager(for: arView)
+        
+        // Set the placement callback
+        manager.onPlacement = { [weak self] position, normal in
+            self?.handlePrecisePlacement(at: position, normal: normal)
+        }
+        
+        // Store the manager
+        focusEntityManager = manager
+        
+        // Log success
+        print("Focus entity manager set up successfully")
+    }
+    
+    // MARK: - Placement Handling
+    
+    /// Handles precise placement of a model at the given position with the given surface normal
+    /// - Parameters:
+    ///   - position: The world position to place the model at
+    ///   - normal: The surface normal at the placement position
+    func handlePrecisePlacement(at position: SIMD3<Float>, normal: SIMD3<Float>) {
+        guard let capturedPlaneModel = self.capturedPlaneModel, !lockedPosition else { return }
+        
+        // Only handle placement if we're not in selection mode
+        if !isModelSelected {
+            isModelPlaced = true
+            
+            // Remove previous anchor if it exists
+            if let oldAnchor = currentAnchor {
+                oldAnchor.removeFromParent()
+                activeAnchors.remove(oldAnchor)
+            }
+            
+            // Create a new transform using the position and normal
+            let transform = createTransformFromPositionAndNormal(position, normal)
+            
+            // Create a new anchor at the precise position
+            let newAnchor = AnchorEntity(world: transform)
+            capturedPlaneModel.position = [0, 0, 0]
+            newAnchor.addChild(capturedPlaneModel)
+            arView?.scene.addAnchor(newAnchor)
+            currentAnchor = newAnchor
+            activeAnchors.insert(newAnchor)
+            
+            // Save transform to history
+            saveTransformToHistory()
+            
+            // Provide success feedback
+            let feedback = UINotificationFeedbackGenerator()
+            feedback.notificationOccurred(.success)
+        }
+    }
+    
+    /// Creates a transform matrix from a position and normal vector
+    /// - Parameters:
+    ///   - position: The position in world space
+    ///   - normal: The surface normal
+    /// - Returns: A 4x4 transform matrix
+    private func createTransformFromPositionAndNormal(_ position: SIMD3<Float>, _ normal: SIMD3<Float>) -> simd_float4x4 {
+        // Create a rotation from the normal vector
+        // The normal becomes the Y axis of our coordinate system
+        let normalizedNormal = normalize(normal)
+        
+        // Create an arbitrary vector that's not aligned with the normal
+        var right = SIMD3<Float>(1, 0, 0)
+        if abs(dot(right, normalizedNormal)) > 0.9 {
+            right = SIMD3<Float>(0, 0, 1)
+        }
+        
+        // Calculate right and forward vectors to form an orthogonal basis
+        let forward = normalize(cross(normalizedNormal, right))
+        right = normalize(cross(forward, normalizedNormal))
+        
+        // Create the transform matrix
+        return simd_float4x4(
+            SIMD4<Float>(right.x, normalizedNormal.x, forward.x, 0),
+            SIMD4<Float>(right.y, normalizedNormal.y, forward.y, 0),
+            SIMD4<Float>(right.z, normalizedNormal.z, forward.z, 0),
+            SIMD4<Float>(position.x, position.y, position.z, 1)
+        )
+    }
+    
+    // MARK: - Lifecycle
+    
+    /// Updates the focus entity constraints based on current settings
+    func updateFocusEntityConstraints() {
+        if let focusEntityManager = focusEntityManager {
+            // Set constraints based on the current app state
+            if isWorkModeActive {
+                // Disable constraints in work mode
+                focusEntityManager.updateConstraints(.none)
+            } else if let currentAnchor = currentAnchor {
+                // If we have a current anchor, try to match its plane orientation
+                let transform = currentAnchor.transformMatrix(relativeTo: nil)
+                let normal = SIMD3<Float>(transform.columns.1.x, transform.columns.1.y, transform.columns.1.z)
+                
+                // Check if the normal is mostly vertical or horizontal
+                let upVector = SIMD3<Float>(0, 1, 0)
+                let dotWithUp = abs(dot(normalize(normal), upVector))
+                
+                if dotWithUp > 0.8 {
+                    focusEntityManager.updateConstraints(.horizontalPlaneOnly)
+                } else if dotWithUp < 0.2 {
+                    focusEntityManager.updateConstraints(.verticalPlaneOnly)
+                } else {
+                    focusEntityManager.updateConstraints(.none)
+                }
+            } else {
+                // Default to no constraints
+                focusEntityManager.updateConstraints(.none)
+            }
+        }
+    }
+    
+    /// Cleans up the focus entity manager when the controller is being deallocated
+    func cleanupFocusEntityManager() {
+        focusEntityManager?.cleanup()
+        focusEntityManager = nil
+    }
+    
+    func integrateWithFocusEntityManager() {
+        // Initialize and setup focus entity manager
+        setupFocusEntityManager()
+        
+        // Update constraints based on initial state
+        updateFocusEntityConstraints()
+    }
+     */
+
     override func viewDidLoad() {
         super.viewDidLoad()
         setupARView()
         setupGestures()
         setupModelManipulationGesture()
-        
+        //integrateWithFocusEntityManager()
         // Set up model manipulator with the model entity
         if let modelEntity = capturedPlaneModel {
             modelManipulator.setModelEntity(modelEntity)
@@ -368,7 +524,15 @@ class ARPlaneCaptureViewController: UIViewController, ObservableObject {
         }.store(in: &cancellables)
         
         // Add debug visualization for planes
-        arView.debugOptions = [.showSceneUnderstanding]
+        //arView.debugOptions = [.showSceneUnderstanding]
+        
+        sceneMeshVisualizer = SceneMeshVisualizer(arView: arView)
+        // Enable it with default settings (enabled, wireframe off, rainbow on)
+        // configure with custom settings
+        sceneMeshVisualizer?.setWireframeMode(true)
+        sceneMeshVisualizer?.setRainbowMode(false)
+        sceneMeshVisualizer?.setMeshOpacity(0.33)
+        sceneMeshVisualizer?.enable()
     }
     
     private func setupGestures() {

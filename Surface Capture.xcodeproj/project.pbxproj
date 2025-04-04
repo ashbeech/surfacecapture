@@ -37,9 +37,22 @@
 		D7B97870F2C53C108543FDC2 /* Pods-Surface Capture.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Surface Capture.debug.xcconfig"; path = "Target Support Files/Pods-Surface Capture/Pods-Surface Capture.debug.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		5E1225652DA00D5E00F9D045 /* Exceptions for "Surface Capture" folder in "Surface Capture" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Untitled.swift,
+			);
+			target = 5E2BC8592D2824A500C7F6EF /* Surface Capture */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		5E2BC85C2D2824A500C7F6EF /* Surface Capture */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				5E1225652DA00D5E00F9D045 /* Exceptions for "Surface Capture" folder in "Surface Capture" target */,
+			);
 			path = "Surface Capture";
 			sourceTree = "<group>";
 		};
