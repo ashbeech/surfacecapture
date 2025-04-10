@@ -24,7 +24,7 @@ public class SceneMeshVisualizer {
     private var currentOpacity: Float = 0.7
     private var isWireframe: Bool = false
     private var isRainbowMode: Bool = true
-    private var isEnabled: Bool = true
+    public var isEnabled: Bool = true
     
     // Store reference to scene understanding entities for tracking
     private var meshEntities: [Entity] = []

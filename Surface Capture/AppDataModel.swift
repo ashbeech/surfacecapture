@@ -203,7 +203,8 @@ class AppDataModel: ObservableObject, Identifiable {
         
         var configuration = ObjectCaptureSession.Configuration()
         configuration.checkpointDirectory = scanFolderManager.snapshotsFolder
-        configuration.isOverCaptureEnabled = true // Enable over-capture for better coverage
+        configuration.isOverCaptureEnabled = false // Enable over-capture for better coverage
+        
         
         // Launch a task to monitor initialization
         Task {
