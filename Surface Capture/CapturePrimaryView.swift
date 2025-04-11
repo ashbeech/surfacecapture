@@ -517,9 +517,9 @@ struct CapturePrimaryView: View {
     var body: some View {
         ZStack {
             if isSessionReady && !isTransitioning && !isImagePickerPresented && !isInImagePickerFlow {
-                ObjectCaptureView(session: session)
-                    .hideObjectReticle(true)
-                //CustomObjectCaptureView(session: session)
+                //ObjectCaptureView(session: session)
+                    //.hideObjectReticle(true)
+                SimplifiedObjectCaptureView(session: session)
                     .edgesIgnoringSafeArea(.all)
                     .overlay(alignment: .topLeading) {
                         // Back button with circular styling
@@ -1229,32 +1229,17 @@ extension Notification.Name {
     static let ARSessionDidBecomeActive = Notification.Name("ARSessionDidBecomeActive")
 }
 
-/*
-struct CustomObjectCaptureView: UIViewRepresentable {
+struct SimplifiedObjectCaptureView: UIViewRepresentable {
     var session: ObjectCaptureSession
     
-    // Reference to store our task and timer
+    // Minimal coordinator with tracking task added
     class Coordinator: NSObject {
-        var trackingTask: Task<Void, Never>?
-        var removalTimer: Timer?
-        var stateMonitorTask: Task<Void, Never>?
-        var trackingChangeMonitor: Task<Void, Never>?
-        var focusNodeObserver: NSKeyValueObservation?
-        var isCapturing: Bool = false
         var hostingController: UIHostingController<ObjectCaptureView<EmptyView>>?
-        
-        // Keep track of whether we've already created a focus entity
-        var focusEntityCreated: Bool = false
-        var focusEntityManager: FocusEntityManager?
+        var trackingChangeMonitor: Task<Void, Never>?
         
         deinit {
-            print("CustomObjectCaptureView coordinator deinit")
-            trackingTask?.cancel()
-            removalTimer?.invalidate()
-            stateMonitorTask?.cancel()
+            print("SimplifiedObjectCaptureView coordinator deinit")
             trackingChangeMonitor?.cancel()
-            focusNodeObserver?.invalidate()
-            focusEntityManager?.cleanup()
         }
     }
     
@@ -1265,7 +1250,6 @@ struct CustomObjectCaptureView: UIViewRepresentable {
     func makeUIView(context: Context) -> UIView {
         // Create a container view
         let containerView = UIView(frame: .zero)
-        containerView.tag = 9876 // Unique tag to identify this container
         
         // Create the ObjectCaptureView - explicitly hide object reticle
         let objectCaptureView = ObjectCaptureView(session: session)
@@ -1274,6 +1258,8 @@ struct CustomObjectCaptureView: UIViewRepresentable {
         // Add ObjectCaptureView to container
         let hostingController = UIHostingController(rootView: objectCaptureView)
         context.coordinator.hostingController = hostingController
+        
+        removeReticleElements(in: hostingController.view)
         
         // Add as child view controller to handle lifecycle correctly
         if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
@@ -1285,89 +1271,42 @@ struct CustomObjectCaptureView: UIViewRepresentable {
             hostingController.view.frame = containerView.bounds
             hostingController.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             hostingController.didMove(toParent: parentVC)
-                        
-            // Initial removal of UI elements - always do this regardless of capturing state
-            removeARFocusElements(in: hostingController.view)
-            removeExcessFocusEntities(in: hostingController.view, preserveMain: true)
             
-            // DON'T call findARViewAndSetupFocusEntity here anymore
-            // We'll do it when we detect capturing state
-            
-            // Set up a recurrent timer to periodically check and clean up
-            context.coordinator.removalTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak hostingController] _ in
-                guard let view = hostingController?.view else { return }
-                
-                // Always remove unwanted UI elements
-                removeARFocusElements(in: view)
-                findAndHideSmallCircularElements(in: view, preserveCamera: true)
-                removeExcessFocusEntities(in: view, preserveMain: true)
-                
-                // But only ensure the focus entity is visible if we're capturing
-                if context.coordinator.isCapturing {
-                    context.coordinator.focusEntityManager?.setVisible(true)
-                } else {
-                    context.coordinator.focusEntityManager?.setVisible(false)
-                }
+            // Initial removal of reticle elements with a slight delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                guard let view = hostingController.view else { return }
+                removeReticleElements(in: view)
             }
             
-            // Start tracking changes monitor
+            // Monitor tracking changes to remove reticle after coaching overlay
             context.coordinator.trackingChangeMonitor = Task {
                 for await trackingState in session.cameraTrackingUpdates {
                     print("Camera tracking updated to: \(trackingState)")
                     
-                    // When tracking becomes limited, aggressively remove coaching overlay
+                    // When tracking becomes limited, remove reticle after coaching overlay appears
                     if case .limited = trackingState {
                         await MainActor.run {
-                            print("Tracking became limited - removing coaching overlay")
-                            // Schedule removals with delays
+                            print("Tracking became limited - removing reticle after coaching overlay")
+                            // Schedule removals with staggered delays to catch coaching overlay
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                                aggressivelyRemoveCoachingOverlay(in: hostingController.view)
+                                removeReticleElements(in: hostingController.view)
                             }
                             
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                aggressivelyRemoveCoachingOverlay(in: hostingController.view)
+                                removeReticleElements(in: hostingController.view)
                             }
                             
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                                aggressivelyRemoveCoachingOverlay(in: hostingController.view)
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                removeReticleElements(in: hostingController.view)
                             }
                         }
                     } else if case .normal = trackingState {
                         await MainActor.run {
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                                findAndHideSmallCircularElements(in: hostingController.view, preserveCamera: true)
+                            // When tracking returns to normal, ensure reticle is still hidden
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                removeReticleElements(in: hostingController.view)
                             }
                         }
-                    }
-                }
-            }
-            
-            // Monitor session state to know when capturing begins/ends
-            context.coordinator.stateMonitorTask = Task {
-                for await state in session.stateUpdates {
-                    await MainActor.run {
-                        print("Session state updated to: \(state)")
-                        
-                        if case .capturing = state {
-                            // We're now capturing - initialize the FocusEntity if needed and show it
-                            context.coordinator.isCapturing = true
-                            
-                            if context.coordinator.focusEntityManager == nil {
-                                // Only now do we initialize the FocusEntity
-                                findARViewAndSetupFocusEntity(in: hostingController.view, coordinator: context.coordinator)
-                            } else {
-                                // Just make it visible if it already exists
-                                context.coordinator.focusEntityManager?.setVisible(true)
-                            }
-                        } else {
-                            // We're not capturing - hide the FocusEntity
-                            context.coordinator.isCapturing = false
-                            context.coordinator.focusEntityManager?.setVisible(false)
-                        }
-                        
-                        // Always clean up unwanted elements
-                        removeARFocusElements(in: hostingController.view)
-                        removeExcessFocusEntities(in: hostingController.view, preserveMain: true)
                     }
                 }
             }
@@ -1377,157 +1316,28 @@ struct CustomObjectCaptureView: UIViewRepresentable {
     }
     
     func updateUIView(_ uiView: UIView, context: Context) {
-        // Make sure we preserve the camera view on updates
+        // Make sure we remove reticle elements on updates
         if let hostView = context.coordinator.hostingController?.view {
-            // Remove unwanted UI elements but preserve the camera view
-            removeARFocusElements(in: hostView)
-            findAndHideSmallCircularElements(in: hostView, preserveCamera: true)
-            
-            // Remove any excess focus entities but keep our main one
-            removeExcessFocusEntities(in: hostView, preserveMain: true)
-            
-            // Ensure our focus entity is visible
-            context.coordinator.focusEntityManager?.setVisible(true)
+            removeReticleElements(in: hostView)
         }
     }
     
-    // MARK: - Private Helper Methods
+    // MARK: - Private Helper Method
     
-    // Special method to aggressively remove coaching overlay when tracking becomes limited
-    private func aggressivelyRemoveCoachingOverlay(in view: UIView?) {
+    // Simplified method to remove only reticle-related elements
+    private func removeReticleElements(in view: UIView?) {
         guard let view = view else { return }
         
-        // First check direct subviews
         for subview in view.subviews {
-            // Look specifically for ARCoachingOverlayView
-            if String(describing: type(of: subview)) == "ARCoachingOverlayView" {
-                print("Found ARCoachingOverlayView during tracking limitation - removing")
-                
-                // Try multiple methods to disable it
-                if let coachingOverlay = subview as? ARCoachingOverlayView {
-                    coachingOverlay.setActive(false, animated: false)
-                    coachingOverlay.delegate = nil
-                    coachingOverlay.session = nil
-                }
-                
-                // Also use Objective-C runtime to disable it
-                let selector = NSSelectorFromString("setActive:animated:")
-                if subview.responds(to: selector) {
-                    subview.perform(selector, with: false, with: false)
-                }
-                
-                // Hide and remove it
-                subview.isHidden = true
-                subview.removeFromSuperview()
-            }
-            
-            // Recursively check subviews
-            if !subview.subviews.isEmpty {
-                aggressivelyRemoveCoachingOverlay(in: subview)
-            }
-        }
-        
-        // Also try to find the ARView and disable its coaching overlay
-        for subview in view.subviews {
-            if String(describing: type(of: subview)).contains("ARView") {
-                if let arView = subview as? ARView {
-                    // Try to find coaching overlay property through reflection
-                    let mirror = Mirror(reflecting: arView)
-                    for child in mirror.children {
-                        if let label = child.label {
-                            if label.contains("coach") || label.contains("overlay") {
-                                if let overlayObject = child.value as AnyObject? {
-                                    // Try to disable it
-                                    overlayObject.setValue(false, forKey: "active")
-                                    overlayObject.setValue(nil, forKey: "session")
-                                    overlayObject.setValue(nil, forKey: "delegate")
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                // Continue checking subviews
-                if !subview.subviews.isEmpty {
-                    aggressivelyRemoveCoachingOverlay(in: subview)
-                }
-            }
-        }
-    }
-    
-    // TODO: Not sure if needed as isn't in subview
-    private func isFocusEntity(_ view: UIView) -> Bool {
-        // Check if this is our FocusEntity by looking at its class hierarchy
-        let className = String(describing: type(of: view))
-        print("!!!!! FocusEntity !!!!!!: \(className)")
-
-        // FocusEntity related classes should be skipped
-        return className.contains("FocusEntity") && !className.contains("ARKit") &&
-               !className.contains("ReticleView") && !className.contains("ObjectReticle")
-    }
-    
-    // Comprehensive removal of all AR focus-related elements
-    private func removeARFocusElements(in view: UIView?) {
-        guard let view = view else { return }
-        
-        // Remove coaching overlays
-        for subview in view.subviews {
-            // Check if it's an ARCoachingOverlayView
-            if String(describing: type(of: subview)) == "ARCoachingOverlayView" {
-                if let coachingOverlay = subview as? ARCoachingOverlayView {
-                    coachingOverlay.setActive(false, animated: false)
-                }
-                subview.isHidden = true
-                subview.removeFromSuperview()
-                continue
-            }
-            
-            // Skip if it's our own FocusEntity
-            if isFocusEntity(subview) {
-                print("Preserving our FocusEntity: \(String(describing: type(of: subview)))")
-                continue
-            }
-            
-            // Check if it's a camera view - NEVER HIDE THIS
+            // Check for reticle elements by class name
             let className = String(describing: type(of: subview))
-            if className.contains("Camera") || className.contains("SCNView") ||
-               className.contains("MetalView") || (className.contains("AR") && subview.frame.size.width > 200) {
-                
-                // Camera views are large and fill most of the screen - don't hide them
-                print("Preserving camera view: \(className)")
-                
-                // Continue with other subviews
+            
+            // Handle coaching overlay (keep it visible but still look for reticle inside it)
+            if className == "ARCoachingOverlayView" {
+                // Don't hide the coaching overlay itself, but check for reticle elements inside
                 if !subview.subviews.isEmpty {
-                    removeARFocusElements(in: subview)
+                    removeReticleElements(in: subview)
                 }
-                continue
-            }
-            
-            // Hide anything that might be a focus entity or reticle, but not our own FocusEntity
-            if (className.contains("Reticle") || className.contains("reticle") ||
-                className.contains("Indicator")) && !isFocusEntity(subview) {
-                
-                subview.isHidden = true
-                print("Hidden potential AR element: \(className)")
-            }
-            
-            // Recursively process subviews
-            if !subview.subviews.isEmpty {
-                removeARFocusElements(in: subview)
-            }
-        }
-        
-        // Try to access ARView and disable its focus entities
-        findARViewsAndDisableFocusEntities(in: view)
-    }
-    
-    // Modified to be careful with camera view
-    private func findAndHideSmallCircularElements(in view: UIView, preserveCamera: Bool) {
-        for subview in view.subviews {
-            
-            // Skip if it's our own FocusEntity
-            if isFocusEntity(subview) {
-                print("Preserving our FocusEntity in small circular check")
                 continue
             }
             
@@ -1538,400 +1348,76 @@ struct CustomObjectCaptureView: UIViewRepresentable {
                 // If it's small and roughly circular
                 if size.width < 30 && size.height < 30 && abs(size.width - size.height) < 5 {
                     subview.isHidden = true
-                    print("Hidden small circular element")
-                    continue
-                }
-            }
-            // FIRST CHECK: Skip camera views
-            let className = String(describing: type(of: subview))
-            let isCameraView = className.contains("Camera") || className.contains("SCNView") ||
-                              className.contains("MetalView") || className.contains("ARView") ||
-                              (className.contains("AR") && subview.frame.size.width > 200)
-            
-            if preserveCamera && isCameraView {
-                // Skip hiding this view - it's likely the camera view
-                print("Preserving potential camera view: \(className)")
-                
-                // But still check its subviews for elements to hide
-                if !subview.subviews.isEmpty {
-                    findAndHideSmallCircularElements(in: subview, preserveCamera: preserveCamera)
-                }
-                continue
-            }
-            
-            // Skip large views that take up most of the screen - these are likely important
-            if subview.frame.width > UIScreen.main.bounds.width * 0.8 &&
-               subview.frame.height > UIScreen.main.bounds.height * 0.8 {
-                // This is likely a main content view - don't hide it
-                if !subview.subviews.isEmpty {
-                    findAndHideSmallCircularElements(in: subview, preserveCamera: preserveCamera)
-                }
-                continue
-            }
-            
-            // Look for elements in the center of the screen
-            let viewCenter = subview.center
-            if let parentView = subview.superview {
-                let parentCenter = CGPoint(x: parentView.bounds.midX, y: parentView.bounds.midY)
-                let centerDistance = hypot(viewCenter.x - parentCenter.x, viewCenter.y - parentCenter.y)
-                
-                // If it's near the center and small, it's likely the focus dot
-                if centerDistance < 100 && subview.bounds.width < 40 && subview.bounds.height < 40 {
-                    subview.isHidden = true
-                    print("Hidden small element near center")
-                    continue
-                }
-            }
-            
-            // Look for any small UIImageView elements that might be showing a dot
-            if subview is UIImageView || className.contains("ImageView") {
-                let size = subview.frame.size
-                if size.width < 30 && size.height < 30 {
-                    subview.isHidden = true
-                    print("Hidden small image view that might be a dot")
+                    subview.removeFromSuperview()
                     continue
                 }
             }
             
             // Recursively process subviews
             if !subview.subviews.isEmpty {
-                findAndHideSmallCircularElements(in: subview, preserveCamera: preserveCamera)
+                removeReticleElements(in: subview)
             }
         }
+        
+        // Try to access ARView and disable its reticle elements
+        findARViewsAndDisableReticles(in: view)
     }
     
-    private func createFocusEntity(with arView: ARView, coordinator: Coordinator) {
-        print("Creating FocusEntity on ARView")
-        
-        // Create the focus entity manager if it doesn't exist yet
-        if coordinator.focusEntityManager == nil {
-            // Create the focus entity manager
-            let manager = FocusEntityManager(for: arView)
-            
-            // Store the manager in the coordinator
-            coordinator.focusEntityManager = manager
-            
-            // Ensure the focus entity is visible
-            manager.setVisible(true)
-            
-            print("FocusEntity successfully created")
-        } else {
-            print("FocusEntity already exists")
-        }
-    }
-
-    private func findARViewByReflection(in view: UIView, coordinator: Coordinator) {
-        // Function to check a view and its subviews for AR-related methods or properties
-        func checkViewForARSession(_ view: UIView) -> UIView? {
-            // Check if the view responds to AR-related selectors
-            if view.responds(to: #selector(getter: ARView.session)) ||
-               view.responds(to: Selector(("arSession"))) ||
-                view.responds(to: #selector(setter: ARView.session)) {
-                print("Found view responding to AR session selectors: \(String(describing: type(of: view)))")
-                return view
-            }
-            
-            // Check property list for properties containing "session"
-            let mirror = Mirror(reflecting: view)
-            for child in mirror.children {
-                if let label = child.label,
-                   (label.contains("session") || label.contains("Session")) {
-                    print("Found view with AR session property: \(String(describing: type(of: view)))")
-                    return view
-                }
-            }
-            
-            // Recursively check subviews
-            for subview in view.subviews {
-                if let arView = checkViewForARSession(subview) {
-                    return arView
-                }
-            }
-            
-            return nil
-        }
-        
-        // Try to find a view with AR session
-        if let potentialARView = checkViewForARSession(view) {
-            print("Last resort found potential ARView: \(String(describing: type(of: potentialARView)))")
-            
-            // Create focus entity on this view as a best effort
-            if let arView = potentialARView as? ARView {
-                createFocusEntity(with: arView, coordinator: coordinator)
-            } else {
-                print("Found view is not an ARView, cannot create focus entity")
-                
-                // Check if view contains an ARView
-                for subview in potentialARView.subviews {
-                    if let arView = subview as? ARView {
-                        createFocusEntity(with: arView, coordinator: coordinator)
-                        return
-                    }
-                }
-            }
-        } else {
-            print("Failed to find any view with AR session capability")
-        }
-    }
-    
-    // New method to find ARView and setup FocusEntity
-    private func findARViewAndSetupFocusEntity(in view: UIView, coordinator: Coordinator) {
-        // Skip if we already have a FocusEntityManager
-        guard coordinator.focusEntityManager == nil && !coordinator.focusEntityCreated else {
-            print("FocusEntity already exists - skipping additional setup")
-            return
-        }
-        
-        // Function to perform ARView search with progressive delays
-        func attemptARViewSearch(attempt: Int = 1, maxAttempts: Int = 5) {
-            print("ARView search attempt \(attempt)/\(maxAttempts)")
-            
-            // Simple function to search for ARView (not recursive)
-            func findARView(in view: UIView) -> ARView? {
-                // Direct check if the view is an ARView
-                if let arView = view as? ARView {
-                    print("Direct ARView found in attempt \(attempt)")
-                    return arView
-                }
-                
-                // Check immediate children
-                for subview in view.subviews {
-                    if let arView = subview as? ARView {
-                        print("ARView found in subview in attempt \(attempt)")
-                        return arView
-                    }
-                    
-                    // Check one level deeper for ARView
-                    for deeperView in subview.subviews {
-                        if let arView = deeperView as? ARView {
-                            let deepClassName = String(describing: type(of: deeperView))
-                            print("ARView found in deeper level in attempt \(attempt)")
-                            print("ARView name: \(deepClassName)")
-                            // TODO: Always seems to catch ARview here so can delete rest. Log: "ARView name: ARView"
-                            // I think that ObjectCaptureView (which has subview of Arview we're piggy-backing off of, has different tracking state data prior and post capturing
-                            // We do know only one Focus Entity is being addded to the right ARView now, but cannot determing why is acting differenting post and prior: white segmented, intense emissive glow prior, etc.
-                            return arView
-                        }
-                        
-                        // Look specifically for UIViews containing metal or SCN in their class name
-                        // as these are likely to be ARViews or their containers
-                        let deeperClassName = String(describing: type(of: deeperView))
-                        if deeperClassName.contains("Metal") ||
-                           deeperClassName.contains("SCN") ||
-                           deeperClassName.contains("AR") {
-                            print("Found potential AR container: \(deeperClassName)")
-                            
-                            // Look inside this potential container
-                            for potentialARView in deeperView.subviews {
-                                if let arView = potentialARView as? ARView {
-                                    print("ARView found inside container in attempt \(attempt)")
-                                    return arView
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                // Look for any view that seems like it might be AR-related
-                func findPotentialARViews(in view: UIView) -> [UIView] {
-                    var potentialViews: [UIView] = []
-                    
-                    let className = String(describing: type(of: view))
-                    if className.contains("AR") ||
-                       className.contains("Metal") ||
-                       className.contains("SCN") {
-                        potentialViews.append(view)
-                    }
-                    
-                    for subview in view.subviews {
-                        potentialViews.append(contentsOf: findPotentialARViews(in: subview))
-                    }
-                    
-                    return potentialViews
-                }
-                
-                // Find potential AR views and log them
-                let potentialARViews = findPotentialARViews(in: view)
-                if !potentialARViews.isEmpty {
-                    print("Found \(potentialARViews.count) potential AR-related views:")
-                    for (index, potentialView) in potentialARViews.enumerated() {
-                        print("  \(index): \(String(describing: type(of: potentialView)))")
-                    }
-                }
-                
-                return nil
-            }
-            
-            // First try to find ARView directly
-            if let arView = findARView(in: view) {
-                print("Successfully found ARView on attempt \(attempt)")
-                createFocusEntity(with: arView, coordinator: coordinator)
-                return
-            }
-            
-            // If we didn't find it and haven't reached max attempts, try again with delay
-            if attempt < maxAttempts {
-                let delay = 0.2 * Double(attempt) // Increasing delay with each attempt
-                print("ARView not found, retrying in \(delay) seconds...")
-                
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                    attemptARViewSearch(attempt: attempt + 1, maxAttempts: maxAttempts)
-                }
-            } else {
-                print("Failed to find ARView after \(maxAttempts) attempts")
-                
-                // Last resort: check if any view has a method or property related to AR session
-                print("Attempting last resort search for ARView...")
-                findARViewByReflection(in: view, coordinator: coordinator)
-            }
-        }
-        
-        // Mark that we're starting the search process
-        coordinator.focusEntityCreated = true
-        
-        // Start the progressive search
-        attemptARViewSearch()
-    }
-    
-    // Method to properly identify and remove excess focus entities
-    private func removeExcessFocusEntities(in view: UIView, preserveMain: Bool = true) {
-        // Get references to all views that could be focus entities
-        var potentialFocusEntities: [UIView] = []
-        
-        // Recursive function to find all potential focus entities
-        func findPotentialFocusEntities(in view: UIView) {
-            let className = String(describing: type(of: view))
-            
-            // Check if it might be a focus entity
-            if className.contains("FocusEntity") ||
-               (className.contains("Entity") && className.contains("Focus")) {
-                potentialFocusEntities.append(view)
-            }
-            
-            // Check all subviews
-            for subview in view.subviews {
-                findPotentialFocusEntities(in: subview)
-            }
-        }
-        
-        // Find all potential focus entities
-        findPotentialFocusEntities(in: view)
-        
-        print("Found \(potentialFocusEntities.count) potential focus entities")
-        
-        // If we only want to preserve the main one and found multiple
-        if preserveMain && potentialFocusEntities.count > 1 {
-            // Skip the first one (assumed to be the main one) and remove the rest
-            for i in 1..<potentialFocusEntities.count {
-                potentialFocusEntities[i].isHidden = true
-                potentialFocusEntities[i].removeFromSuperview()
-            }
-        }
-    }
-    
-    // Find ARViews and disable their focus entities, but be careful not to disable the view itself
-    private func findARViewsAndDisableFocusEntities(in view: UIView) {
+    // Simplified method to find ARViews and only disable reticle elements
+    private func findARViewsAndDisableReticles(in view: UIView) {
         for subview in view.subviews {
             // Look for ARView classes
             let className = String(describing: type(of: subview))
-            if className.contains("ARView") || className.contains("ARSCNView") ||
-               className.contains("SceneView") {
-                
-                // DON'T HIDE THE VIEW ITSELF!
-                // subview.isHidden = false;  // Ensure the view itself is visible
-                
-                // Try to access focus-related properties through reflection
-                let mirror = Mirror(reflecting: subview)
-                for child in mirror.children {
-                    if let label = child.label {
-                        if label.contains("focus") || label.contains("reticle") ||
-                           label.contains("indicator") || label.contains("placement") {
-                            // Try to disable this property if it's an object
-                            if let entity = child.value as? Entity {
-                                entity.isEnabled = false
-                                print("Disabled AR entity: \(label)")
-                            } else if let object = child.value as AnyObject? {
-                                // Try setting common properties to disable visibility
-                                for property in ["isEnabled", "isVisible", "isHidden", "opacity"] {
-                                    if object.responds(to: Selector(property)) {
-                                        if property.contains("hidden") {
-                                            object.setValue(true, forKey: property)
-                                        } else if property.contains("opacity") {
-                                            object.setValue(0.0, forKey: property)
-                                        } else {
-                                            object.setValue(false, forKey: property)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+            if className.contains("ARView") || className.contains("ARSCNView") {
                 
                 // If this is an ARView, try directly accessing its scene
                 if let arView = subview as? ARView {
-                    arView.debugOptions = []
-                    
-                    // Try to disable focus square through various means
-                    if let method = class_getInstanceMethod(type(of: arView), Selector(("setFocusSquare:"))) {
-                        let imp = method_getImplementation(method)
-                        let function = unsafeBitCast(imp, to: (@convention(c) (AnyObject, Selector, Bool) -> Void).self)
-                        function(arView, Selector(("setFocusSquare:")), false)
-                    }
-                    
-                    // Find focus entities in scene but don't disable normal entities
+                    // Find and disable only reticle entities in scene
                     for anchor in arView.scene.anchors {
-                        disableFocusEntitiesOnly(anchor)
+                        disableReticleEntities(anchor)
                     }
                 }
             }
             
             // Recursively process subviews
             if !subview.subviews.isEmpty {
-                findARViewsAndDisableFocusEntities(in: subview)
+                findARViewsAndDisableReticles(in: subview)
             }
         }
     }
     
-    // Modified to ONLY disable focus/dot related entities, not all entities
-    private func disableFocusEntitiesOnly(_ entity: Entity) {
+    // Only disable reticle/dot related entities
+    private func disableReticleEntities(_ entity: Entity) {
         let entityName = entity.name.lowercased()
         let entityType = String(describing: type(of: entity))
         
-        // Check if this entity is related to focus/reticle functionality
+        // Check if this entity is related to reticle functionality
         if entityName.contains("reticle") ||
-           entityName.contains("dot") || entityName.contains("point") ||
-           entityType.contains("Reticle") {
+            entityName.contains("dot") ||
+            entityType.contains("Reticle") {
             entity.isEnabled = false
-            print("Disabled focus entity: \(entity.name)")
         }
         
         // For ModelEntity, check size to find the dot
         if let modelEntity = entity as? ModelEntity {
             let scale = modelEntity.scale
-            // Only disable if it's very small (likely a dot) - not regular models
-            if scale.x < 30 && scale.y < 30 && scale.z < 30 {
+            // Only disable if it's very small (likely a dot)
+            if scale.x < 5 && scale.y < 5 && scale.z < 5 {
                 modelEntity.isEnabled = false
-                print("Disabled small model entity")
             }
         }
         
         // Recursively process children
         for child in entity.children {
-            disableFocusEntitiesOnly(child)
+            disableReticleEntities(child)
         }
     }
     
     static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) {
-        print("Cleaning up CustomObjectCaptureView resources")
-        coordinator.trackingTask?.cancel()
-        coordinator.stateMonitorTask?.cancel()
-        coordinator.removalTimer?.invalidate()
+        print("Cleaning up SimplifiedObjectCaptureView resources")
         coordinator.trackingChangeMonitor?.cancel()
-        coordinator.focusNodeObserver?.invalidate()
-        coordinator.focusEntityManager?.cleanup()
         
-        // Need to properly clean up the hosting controller
+        // Properly clean up the hosting controller
         if let hostingController = coordinator.hostingController {
             hostingController.willMove(toParent: nil)
             hostingController.view.removeFromSuperview()
@@ -1939,4 +1425,3 @@ struct CustomObjectCaptureView: UIViewRepresentable {
         }
     }
 }
-*/
