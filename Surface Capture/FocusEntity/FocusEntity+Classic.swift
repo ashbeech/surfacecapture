@@ -1,7 +1,6 @@
 //
 //  FocusEntity+Classic.swift
 //  FocusEntity
-//  Jigma App
 //
 
 import RealityKit

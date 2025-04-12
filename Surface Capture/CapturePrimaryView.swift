@@ -2,6 +2,8 @@
 //  CapturePrimaryView.swift
 //  Surface Capture App
 //
+//  Created by Ashley Davison on 09/04/2025.
+//
 
 import SwiftUI
 import RealityKit
@@ -518,7 +520,7 @@ struct CapturePrimaryView: View {
         ZStack {
             if isSessionReady && !isTransitioning && !isImagePickerPresented && !isInImagePickerFlow {
                 //ObjectCaptureView(session: session)
-                    //.hideObjectReticle(true)
+                //.hideObjectReticle(true)
                 SimplifiedObjectCaptureView(session: session)
                     .edgesIgnoringSafeArea(.all)
                     .overlay(alignment: .topLeading) {
@@ -916,34 +918,34 @@ struct CapturePrimaryView: View {
                         )
                         .disabled(!session.canRequestImageCapture)
                         .opacity(session.canRequestImageCapture ? 1.0 : 0.5)
-
-                    // Progress button
-                    CaptureProgressButton(
-                        imageCount: capturedImageCount,
-                        minRequired: AppDataModel.minNumImages,
-                        isEnabled: captureQuality.isEnabled,
-                        isCapturingMode: true,
-                        action: {
-                            withAnimation {
-                                if captureQuality.isEnabled {
-                                    isTransitioning = true
-                                    let generator = UINotificationFeedbackGenerator()
-                                    generator.notificationOccurred(.success)
-                                    session.finish()
-                                } else {
-                                    let generator = UINotificationFeedbackGenerator()
-                                    generator.notificationOccurred(.warning)
-                                    
-                                    if captureQuality == .noTracking || captureQuality == .limitedTracking {
-                                        showTrackingWarning = true
+                        
+                        // Progress button
+                        CaptureProgressButton(
+                            imageCount: capturedImageCount,
+                            minRequired: AppDataModel.minNumImages,
+                            isEnabled: captureQuality.isEnabled,
+                            isCapturingMode: true,
+                            action: {
+                                withAnimation {
+                                    if captureQuality.isEnabled {
+                                        isTransitioning = true
+                                        let generator = UINotificationFeedbackGenerator()
+                                        generator.notificationOccurred(.success)
+                                        session.finish()
+                                    } else {
+                                        let generator = UINotificationFeedbackGenerator()
+                                        generator.notificationOccurred(.warning)
+                                        
+                                        if captureQuality == .noTracking || captureQuality == .limitedTracking {
+                                            showTrackingWarning = true
+                                        }
                                     }
                                 }
                             }
-                        }
-                    )
-                    .frame(width: 220)
-                }
-                .transition(.opacity)
+                        )
+                        .frame(width: 220)
+                    }
+                    .transition(.opacity)
                 }
             }
             .animation(.easeInOut(duration: 0.5), value: isCapturing)
@@ -957,10 +959,11 @@ struct CapturePrimaryView: View {
         @State private var showStreamingView = false
         @EnvironmentObject var appModel: AppDataModel
         
-        // Start joining WebRTC stream
+        // Modified to preserve session state
         private func startJoiningStream() {
-            // Gracefully end the object capture session without triggering errors
-            appModel.endObjectCaptureSession()
+            // Instead of ending the session, just pause it temporarily
+            // Don't call appModel.endObjectCaptureSession()
+            
             // Show the streaming view
             showStreamingView = true
         }
@@ -981,6 +984,10 @@ struct CapturePrimaryView: View {
                 .background(Capsule().fill(Color.purple))
             }
             .fullScreenCover(isPresented: $showStreamingView, onDismiss: {
+                // When JoinView is dismissed, ensure we're still in capturing state
+                if appModel.state != .capturing && appModel.objectCaptureSession != nil {
+                    appModel.state = .capturing
+                }
             }) {
                 // Present the JoinView as a full-screen cover
                 JoinView(onClose: {
@@ -990,7 +997,7 @@ struct CapturePrimaryView: View {
             }
         }
     }
-
+    
     
     // MARK: - Setup Tracking Updates
     
@@ -1058,50 +1065,50 @@ struct CapturePrimaryView: View {
         imageCountTimer = nil
     }
     /*
-    private func muteSystemVolume() {
-        do {
-            let audioSession = AVAudioSession.sharedInstance()
-            
-            // Store original settings
-            originalAudioCategory = audioSession.category
-            originalAudioMode = audioSession.mode
-            originalAudioOptions = audioSession.categoryOptions
-            
-            // Set to a silent mode - this should minimize system sounds
-            try audioSession.setCategory(.ambient, mode: .default, options: [])
-            try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
-            
-            // Additional step to minimize sounds
-            // We can't directly set volume, but we can deactivate and reactivate
-            try audioSession.setActive(false)
-            try audioSession.setActive(true)
-        } catch {
-            print("Failed to silence audio: \(error)")
-        }
-    }
-    
-    private func restoreSystemVolume() {
-        do {
-            let audioSession = AVAudioSession.sharedInstance()
-            
-            if let originalCategory = originalAudioCategory,
-               let originalMode = originalAudioMode {
-                try audioSession.setCategory(originalCategory,
-                                            mode: originalMode,
-                                            options: originalAudioOptions ?? [])
-                try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
-            }
-        } catch {
-            print("Failed to restore audio: \(error)")
-        }
-    }
-    */
+     private func muteSystemVolume() {
+     do {
+     let audioSession = AVAudioSession.sharedInstance()
+     
+     // Store original settings
+     originalAudioCategory = audioSession.category
+     originalAudioMode = audioSession.mode
+     originalAudioOptions = audioSession.categoryOptions
+     
+     // Set to a silent mode - this should minimize system sounds
+     try audioSession.setCategory(.ambient, mode: .default, options: [])
+     try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+     
+     // Additional step to minimize sounds
+     // We can't directly set volume, but we can deactivate and reactivate
+     try audioSession.setActive(false)
+     try audioSession.setActive(true)
+     } catch {
+     print("Failed to silence audio: \(error)")
+     }
+     }
+     
+     private func restoreSystemVolume() {
+     do {
+     let audioSession = AVAudioSession.sharedInstance()
+     
+     if let originalCategory = originalAudioCategory,
+     let originalMode = originalAudioMode {
+     try audioSession.setCategory(originalCategory,
+     mode: originalMode,
+     options: originalAudioOptions ?? [])
+     try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+     }
+     } catch {
+     print("Failed to restore audio: \(error)")
+     }
+     }
+     */
     // MARK: - Helper Methods
     private func validateAndSetupSession() {
         isSessionReady = false
         isCameraReady = false
         isInitializing = true
-                
+        
         Task {
             // Add a timeout to prevent indefinite waiting
             let timeout = Task {
@@ -1208,14 +1215,14 @@ struct CapturePrimaryView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                 appModel.messageList.remove(message)
             }
-                        
+            
             return
         }
-
+        
         //muteSystemVolume()
         
         //withAnimation(.easeInOut(duration: 0.5)) {
-            isCapturing = true
+        isCapturing = true
         //}
         
         session.startCapturing()

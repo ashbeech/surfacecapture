@@ -1,7 +1,8 @@
 //
 //  FocusEntity.swift
 //  FocusEntity
-//  Jigma App
+//
+//  Created by Ashley Davison on 09/04/2025.
 //
 
 import Foundation
