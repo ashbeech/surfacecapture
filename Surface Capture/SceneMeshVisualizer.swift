@@ -38,7 +38,7 @@ public class SceneMeshVisualizer {
     
     /// Enables the scene mesh visualization
     public func enable() {
-        guard let arView = arView else { return }
+        guard arView != nil else { return }
         
         isEnabled = true
         
